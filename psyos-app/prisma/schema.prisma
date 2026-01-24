@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PSYCHOLOGIST
+  PATIENT
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+enum MessageAuthorType {
+  PATIENT
+  PSYCHOLOGIST
+  AI
+  SYSTEM
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  users           User[]
+  conversations   Conversation[]
+  messages        Message[]
+  aiPolicies      AiPolicy[]
+  aiEpisodes      AiEpisode[]
+  records         Record[]
+  auditLogs       AuditLog[]
+  mfaChallenges   MfaChallenge[]
+  webauthnCreds   WebAuthnCredential[]
+  sessions        Session[]
+  accessGrants    ConversationAccessGrant[]
+}
+
+model User {
+  id                   String   @id @default(cuid())
+  tenantId             String
+  role                 Role
+  email                String?
+  phone                String?
+  passwordHash         String?
+  webauthnEnabled      Boolean  @default(false)
+  failedLoginAttempts  Int      @default(0)
+  lockedUntil          DateTime?
+  adminMessageAccess   Boolean  @default(false)
+  isSystemAdmin        Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant               Tenant   @relation(fields: [tenantId], references: [id])
+  psychologistProfile  PsychologistProfile?
+  patientProfile       PatientProfile?
+  sessions             Session[]
+  webauthnCredentials  WebAuthnCredential[]
+  mfaChallenges        MfaChallenge[]
+  auditLogs            AuditLog[] @relation("AuditActor")
+  conversationsAsPsychologist Conversation[] @relation("ConversationPsychologist")
+  conversationsAsPatient      Conversation[] @relation("ConversationPatient")
+  accessGrants         ConversationAccessGrant[] @relation("AccessGrantUser")
+  grantsIssued         ConversationAccessGrant[] @relation("AccessGrantBy")
+  aiPoliciesOwned      AiPolicy[] @relation("AiPolicyOwner")
+  recordsCreated       Record[] @relation("RecordCreator")
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, phone])
+  @@unique([email])
+  @@index([tenantId])
+}
+
+model PsychologistProfile {
+  userId      String @id
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model PatientProfile {
+  userId      String @id
+  displayName String
+  phoneE164   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Conversation {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  psychologistUserId String
+  patientUserId      String
+  status             ConversationStatus @default(OPEN)
+  aiEnabled          Boolean            @default(true)
+  encryptedDek       String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  psychologist User   @relation("ConversationPsychologist", fields: [psychologistUserId], references: [id])
+  patient      User   @relation("ConversationPatient", fields: [patientUserId], references: [id])
+  messages     Message[]
+  aiPolicies   AiPolicy[]
+  aiEpisodes   AiEpisode[]
+  records      Record[]
+  accessGrants ConversationAccessGrant[]
+
+  @@index([tenantId])
+  @@index([psychologistUserId])
+  @@index([patientUserId])
+}
+
+model Message {
+  id                String             @id @default(cuid())
+  tenantId          String
+  conversationId    String
+  direction         MessageDirection
+  authorType        MessageAuthorType
+  ciphertext        String
+  iv                String
+  authTag           String
+  externalMessageId String?
+  createdAt         DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([tenantId])
+  @@index([conversationId, createdAt])
+  @@index([externalMessageId])
+  @@unique([tenantId, externalMessageId])
+}
+
+model AiPolicy {
+  id            String   @id @default(cuid())
+  tenantId      String
+  ownerUserId   String?
+  conversationId String?
+  policyText    String
+  flagsJson     Json?
+  updatedAt     DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  owner        User?         @relation("AiPolicyOwner", fields: [ownerUserId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([tenantId])
+}
+
+model AiEpisode {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  episodeNumber  Int
+  aiTurnsUsed    Int      @default(0)
+  isOpen         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([tenantId])
+  @@index([conversationId])
+}
+
+model Record {
+  id               String   @id @default(cuid())
+  tenantId         String
+  conversationId   String
+  createdByUserId  String
+  dataJson         Json
+  createdAt        DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  createdBy    User         @relation("RecordCreator", fields: [createdByUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([conversationId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  actorUserId String?
+  action      String
+  targetType  String
+  targetId    String?
+  metaJson    Json?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  actor  User?  @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([actorUserId])
+}
+
+model MfaChallenge {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  codeHash  String
+  purpose   String   @default("login")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model WebAuthnCredential {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  credentialId  String
+  publicKey     String
+  counter       Int
+  transportsJson Json?
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@unique([credentialId])
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String
+  token       String   @unique
+  expiresAt   DateTime
+  lastSeenAt  DateTime
+  stepUpUntil DateTime?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model ConversationAccessGrant {
+  id               String   @id @default(cuid())
+  tenantId         String
+  conversationId   String
+  userId           String
+  grantedByUserId  String
+  expiresAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  user         User         @relation("AccessGrantUser", fields: [userId], references: [id])
+  grantedBy    User         @relation("AccessGrantBy", fields: [grantedByUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([conversationId])
+  @@index([userId])
+}
