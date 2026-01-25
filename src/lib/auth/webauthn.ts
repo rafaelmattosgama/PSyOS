@@ -28,6 +28,10 @@ function fromBase64Url(input: string) {
   return Buffer.from(input, "base64url");
 }
 
+function toUserIdBytes(userId: string) {
+  return Buffer.from(userId, "utf8");
+}
+
 export async function storeChallenge(key: string, challenge: string) {
   const redis = getRedis();
   await redis.setex(`webauthn:${key}`, CHALLENGE_TTL_SECONDS, challenge);
@@ -52,7 +56,7 @@ export async function startRegistration(params: {
   const options = await generateRegistrationOptions({
     rpName,
     rpID: rpId,
-    userID: params.userId,
+    userID: toUserIdBytes(params.userId),
     userName: params.username,
     attestationType: "none",
     excludeCredentials: params.credentialIds.map((id) => ({
