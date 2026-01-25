@@ -16,7 +16,7 @@ const updateSchema = z.object({
   ownerUserId: z.string().optional(),
   conversationId: z.string().optional(),
   policyText: z.string().min(1),
-  flagsJson: z.record(z.unknown()).optional(),
+  flagsJson: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function GET(request: Request) {
