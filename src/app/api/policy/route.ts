@@ -109,7 +109,7 @@ export async function POST(request: Request) {
   if (existing) {
     await prisma.aiPolicy.updateMany({
       where: { id: existing.id, tenantId: user.tenantId },
-      data: { policyText: body.policyText, flagsJson: body.flagsJson ?? null },
+      data: { policyText: body.policyText, flagsJson: body.flagsJson },
     });
   } else {
     const created = await prisma.aiPolicy.create({
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
         ownerUserId: body.scope === "user" ? body.ownerUserId ?? user.id : null,
         conversationId: body.scope === "conversation" ? body.conversationId ?? null : null,
         policyText: body.policyText,
-        flagsJson: body.flagsJson ?? null,
+        flagsJson: body.flagsJson,
       },
     });
     policyId = created.id;
