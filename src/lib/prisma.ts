@@ -54,15 +54,17 @@ const createPrismaClient = () => {
           }
 
           const action = operation;
+          const argsAny = args as Record<string, unknown> | undefined;
 
           if (action === "create") {
-            if (!args?.data?.tenantId) {
+            const data = argsAny?.data as Record<string, unknown> | undefined;
+            if (!data?.tenantId) {
               throw new Error(`Tenant scope missing for ${model}.create`);
             }
           }
 
           if (action === "createMany") {
-            const data = args?.data ?? [];
+            const data = (argsAny?.data as unknown) ?? [];
             const items = Array.isArray(data) ? data : [data];
             const hasTenantId = items.every((item) => Boolean(item?.tenantId));
             if (!hasTenantId) {
@@ -86,18 +88,18 @@ const createPrismaClient = () => {
           let allowMissingTenant = false;
           if (needsWhere.includes(action)) {
             allowMissingTenant = Boolean(
-              (args as Record<string, unknown> | undefined)?.__allowMissingTenant,
+              argsAny?.__allowMissingTenant,
             );
-            const where = args?.where ?? {};
+            const where = (argsAny?.where as Record<string, unknown> | undefined) ?? {};
             if (!allowMissingTenant && !hasTenantScope(where)) {
               throw new Error(`Tenant scope missing for ${model}.${action}`);
             }
           }
 
-          if (allowMissingTenant && args) {
-            const sanitizedArgs = { ...(args as Record<string, unknown>) };
+          if (allowMissingTenant && argsAny) {
+            const sanitizedArgs = { ...argsAny };
             delete sanitizedArgs.__allowMissingTenant;
-            return query(sanitizedArgs);
+            return query(sanitizedArgs as typeof args);
           }
 
           return query(args);

@@ -1,11 +1,11 @@
 import "dotenv/config";
-import { Worker } from "bullmq";
-import { getRedis } from "@/lib/redis";
+import { Worker, type Job } from "bullmq";
+import { getRedisConnectionOptions } from "@/lib/redis";
 import { processInbound } from "@/worker/processors/inbound";
 import { processAi } from "@/worker/processors/ai";
 import { processOutbound } from "@/worker/processors/outbound";
 
-const connection = getRedis();
+const connection = getRedisConnectionOptions();
 
 const inboundWorker = new Worker(
   "inbound_message_process",
@@ -25,10 +25,11 @@ const outboundWorker = new Worker(
   { connection },
 );
 
-const logFailure = (label: string) => (job: { id?: string }, error: Error) => {
-  // eslint-disable-next-line no-console
-  console.error(`[worker:${label}] job ${job?.id ?? "unknown"} failed:`, error.message);
-};
+const logFailure =
+  (label: string) => (job: Job | undefined, error: Error, _prev?: string) => {
+    // eslint-disable-next-line no-console
+    console.error(`[worker:${label}] job ${job?.id ?? "unknown"} failed:`, error.message);
+  };
 
 inboundWorker.on("failed", logFailure("inbound"));
 aiWorker.on("failed", logFailure("ai"));

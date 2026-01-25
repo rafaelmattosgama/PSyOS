@@ -20,7 +20,10 @@ export function webauthnConfig() {
   };
 }
 
-function toBase64Url(input: Uint8Array) {
+function toBase64Url(input: Uint8Array | string) {
+  if (typeof input === "string") {
+    return input;
+  }
   return Buffer.from(input).toString("base64url");
 }
 
@@ -79,7 +82,7 @@ export async function finishRegistration(params: {
   }
   const verification: VerifiedRegistrationResponse =
     await verifyRegistrationResponse({
-      response: params.response,
+      response: params.response as any,
       expectedChallenge,
       expectedOrigin: origin,
       expectedRPID: rpId,
@@ -100,7 +103,9 @@ export async function startAuthentication(params: {
   userId: string;
   credentialIds: string[];
 }) {
+  const { rpId } = webauthnConfig();
   const options = await generateAuthenticationOptions({
+    rpID: rpId,
     userVerification: "preferred",
     allowCredentials: params.credentialIds.map((id) => ({
       id,
@@ -127,15 +132,15 @@ export async function finishAuthentication(params: {
   }
   const verification: VerifiedAuthenticationResponse =
     await verifyAuthenticationResponse({
-      response: params.response,
+      response: params.response as any,
       expectedChallenge,
       expectedOrigin: origin,
       expectedRPID: rpId,
       authenticator: {
-        credentialID: fromBase64Url(params.credential.id),
+        credentialID: params.credential.id,
         credentialPublicKey: Buffer.from(params.credential.publicKey, "base64"),
         counter: params.credential.counter,
-      },
+      } as any,
     });
   if (!verification.verified) {
     throw new Error("WebAuthn authentication failed");
