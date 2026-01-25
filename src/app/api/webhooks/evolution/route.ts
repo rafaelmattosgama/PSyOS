@@ -3,7 +3,7 @@ import { z } from "zod";
 import { inboundQueue } from "@/lib/queues";
 import { prisma } from "@/lib/prisma";
 
-const payloadSchema = z.record(z.unknown());
+const payloadSchema = z.record(z.string(), z.unknown());
 
 function extractText(payload: Record<string, unknown>) {
   const data = payload.data as Record<string, unknown> | undefined;
