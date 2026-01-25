@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptDek, encryptMessage, getMasterKek } from "@/lib/crypto";
-import { aiQueue } from "@/lib/queues";
+import { getAiQueue } from "@/lib/queues";
 import { logAuditEvent } from "@/lib/audit";
 
 type InboundJob = {
@@ -85,7 +85,7 @@ export async function processInbound(job: InboundJob) {
   }
 
   if (conversation.aiEnabled) {
-    await aiQueue.add("ai_reply_generate", {
+    await getAiQueue().add("ai_reply_generate", {
       tenantId: job.tenantId,
       conversationId: conversation.id,
       triggerMessageId: message.id,

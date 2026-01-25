@@ -2,13 +2,15 @@ FROM node:22-bookworm-slim AS base
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
-    openssl \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile

@@ -9,7 +9,7 @@ import {
 import { callOpenAi } from "@/lib/ai/openai";
 import { storePromptSnapshot } from "@/lib/ai/debug";
 import { getOrCreateEpisode } from "@/lib/ai/episode";
-import { outboundQueue } from "@/lib/queues";
+import { getOutboundQueue } from "@/lib/queues";
 import { logAuditEvent } from "@/lib/audit";
 
 type AiJob = {
@@ -207,7 +207,7 @@ export async function processAi(job: AiJob) {
     },
   });
 
-  await outboundQueue.add("outbound_send_retry", {
+  await getOutboundQueue().add("outbound_send_retry", {
     tenantId: job.tenantId,
     conversationId: conversation.id,
     messageId: aiMessage.id,

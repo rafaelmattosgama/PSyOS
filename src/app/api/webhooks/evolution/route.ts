@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { inboundQueue } from "@/lib/queues";
+import { getInboundQueue } from "@/lib/queues";
 import { prisma } from "@/lib/prisma";
 
 const payloadSchema = z.record(z.string(), z.unknown());
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  await inboundQueue.add("inbound_message_process", {
+  await getInboundQueue().add("inbound_message_process", {
     tenantId,
     externalMessageId: messageId,
     fromPhone: from,

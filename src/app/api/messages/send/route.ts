@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth/guards";
 import { decryptDek, encryptMessage, getMasterKek } from "@/lib/crypto";
 import { logAuditEvent } from "@/lib/audit";
-import { aiQueue, outboundQueue } from "@/lib/queues";
+import { getAiQueue, getOutboundQueue } from "@/lib/queues";
 
 const schema = z.object({
   tenantId: z.string().min(1),
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   });
 
   if (user.role === "PATIENT" && conversation.aiEnabled) {
-    await aiQueue.add("ai_reply_generate", {
+    await getAiQueue().add("ai_reply_generate", {
       tenantId: user.tenantId,
       conversationId: conversation.id,
       triggerMessageId: message.id,
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   if (user.role === "PSYCHOLOGIST") {
-    await outboundQueue.add("outbound_send_retry", {
+    await getOutboundQueue().add("outbound_send_retry", {
       tenantId: user.tenantId,
       conversationId: conversation.id,
       messageId: message.id,
