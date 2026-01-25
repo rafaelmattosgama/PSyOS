@@ -60,7 +60,7 @@ export async function startRegistration(params: {
     userName: params.username,
     attestationType: "none",
     excludeCredentials: params.credentialIds.map((id) => ({
-      id: fromBase64Url(id),
+      id,
       type: "public-key",
     })),
   });
@@ -103,7 +103,7 @@ export async function startAuthentication(params: {
   const options = await generateAuthenticationOptions({
     userVerification: "preferred",
     allowCredentials: params.credentialIds.map((id) => ({
-      id: fromBase64Url(id),
+      id,
       type: "public-key",
     })),
   });
