@@ -28,4 +28,6 @@ services:
 
 volumes:
   psyos_postgres_data:
+    name: psyos_postgres_data
   psyos_redis_data:
+    name: psyos_redis_data
