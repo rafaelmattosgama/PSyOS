@@ -18,7 +18,7 @@ export async function logAuditEvent(params: {
       action,
       targetType,
       targetId: targetId ?? null,
-      metaJson: meta ?? null,
+      metaJson: meta,
     },
   });
 }
