@@ -17,6 +17,7 @@ type Patient = {
   displayName: string | null;
   phoneE164: string | null;
   preferredLanguage: "PT" | "ES" | "EN";
+  psychologistUserId?: string | null;
   psychologistName?: string | null;
   createdAt: string;
 };
@@ -63,6 +64,7 @@ export default function AdminClient({
   const [psychologists, setPsychologists] = useState(initialPsychologists);
   const [patients, setPatients] = useState(initialPatients);
   const [status, setStatus] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [newPsychEmail, setNewPsychEmail] = useState("");
   const [newPsychName, setNewPsychName] = useState("");
@@ -78,8 +80,30 @@ export default function AdminClient({
     () => psychologists.filter((item) => item.isActive),
     [psychologists],
   );
+  const validEmail = (value: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const validPhone = (value: string) => /^\+?\d{8,15}$/.test(value);
+  const setError = (key: string, message: string) =>
+    setFieldErrors((current) => ({ ...current, [key]: message }));
+  const clearError = (key: string) =>
+    setFieldErrors((current) => {
+      if (!current[key]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
 
   const handleCreatePsychologist = async () => {
+    if (!newPsychEmail.trim() || !validEmail(newPsychEmail)) {
+      setStatus("Informe um email valido.");
+      return;
+    }
+    if (!newPsychName.trim()) {
+      setStatus("Informe o nome do psicologo.");
+      return;
+    }
     try {
       setStatus("Criando psicologo...");
       const data = await postJson<{ psychologist: Psychologist }>(
@@ -118,6 +142,18 @@ export default function AdminClient({
   };
 
   const handleCreatePatient = async () => {
+    if (!newPatientEmail.trim() || !validEmail(newPatientEmail)) {
+      setStatus("Informe um email valido.");
+      return;
+    }
+    if (!newPatientName.trim()) {
+      setStatus("Informe o nome do paciente.");
+      return;
+    }
+    if (!newPatientPhone.trim() || !validPhone(newPatientPhone)) {
+      setStatus("Informe o telefone E164 valido.");
+      return;
+    }
     try {
       setStatus("Criando paciente...");
       const data = await postJson<{ patient: Patient }>("/api/admin/patients", {
@@ -127,7 +163,16 @@ export default function AdminClient({
         psychologistUserId: newPatientPsychologist || undefined,
         preferredLanguage: newPatientLanguage,
       });
-      setPatients([data.patient, ...patients]);
+      const psychName =
+        activePsychologists.find((psych) => psych.id === data.patient.psychologistUserId)
+          ?.displayName ??
+        activePsychologists.find((psych) => psych.id === data.patient.psychologistUserId)
+          ?.email ??
+        null;
+      setPatients([
+        { ...data.patient, psychologistName: psychName },
+        ...patients,
+      ]);
       setNewPatientEmail("");
       setNewPatientName("");
       setNewPatientPhone("");
@@ -149,8 +194,18 @@ export default function AdminClient({
         `/api/admin/patients/${id}`,
         updates,
       );
+      const psychName =
+        activePsychologists.find((psych) => psych.id === data.patient.psychologistUserId)
+          ?.displayName ??
+        activePsychologists.find((psych) => psych.id === data.patient.psychologistUserId)
+          ?.email ??
+        null;
       setPatients(
-        patients.map((item) => (item.id === id ? data.patient : item)),
+        patients.map((item) =>
+          item.id === id
+            ? { ...data.patient, psychologistName: psychName }
+            : item,
+        ),
       );
       setStatus("Paciente atualizado.");
     } catch (error) {
@@ -250,19 +305,45 @@ export default function AdminClient({
             className="h-11 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
             placeholder="Email do paciente"
             value={newPatientEmail}
-            onChange={(event) => setNewPatientEmail(event.target.value)}
+            onChange={(event) => {
+              setNewPatientEmail(event.target.value);
+              clearError("newPatientEmail");
+            }}
+            onBlur={(event) => {
+              const value = event.target.value.trim();
+              if (!value || !validEmail(value)) {
+                setError("newPatientEmail", "Email invalido.");
+              }
+            }}
           />
           <input
             className="h-11 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
             placeholder="Nome"
             value={newPatientName}
-            onChange={(event) => setNewPatientName(event.target.value)}
+            onChange={(event) => {
+              setNewPatientName(event.target.value);
+              clearError("newPatientName");
+            }}
+            onBlur={(event) => {
+              if (!event.target.value.trim()) {
+                setError("newPatientName", "Nome obrigatorio.");
+              }
+            }}
           />
           <input
             className="h-11 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
             placeholder="Telefone E164"
             value={newPatientPhone}
-            onChange={(event) => setNewPatientPhone(event.target.value)}
+            onChange={(event) => {
+              setNewPatientPhone(event.target.value);
+              clearError("newPatientPhone");
+            }}
+            onBlur={(event) => {
+              const value = event.target.value.trim();
+              if (!value || !validPhone(value)) {
+                setError("newPatientPhone", "Telefone E164 invalido.");
+              }
+            }}
           />
           <select
             className="h-11 rounded-xl border border-black/10 bg-white/90 px-3 text-sm"
@@ -291,10 +372,24 @@ export default function AdminClient({
             className="h-11 rounded-xl bg-[color:var(--accent-500)] px-4 text-sm font-semibold text-white"
             type="button"
             onClick={handleCreatePatient}
+            disabled={
+              !validEmail(newPatientEmail) ||
+              !newPatientName.trim() ||
+              !validPhone(newPatientPhone)
+            }
           >
             Criar
           </button>
         </div>
+        {fieldErrors.newPatientEmail ? (
+          <p className="text-xs text-red-600">{fieldErrors.newPatientEmail}</p>
+        ) : null}
+        {fieldErrors.newPatientName ? (
+          <p className="text-xs text-red-600">{fieldErrors.newPatientName}</p>
+        ) : null}
+        {fieldErrors.newPatientPhone ? (
+          <p className="text-xs text-red-600">{fieldErrors.newPatientPhone}</p>
+        ) : null}
 
         <div className="mt-5 space-y-3">
           {patients.map((item) => (
@@ -302,13 +397,17 @@ export default function AdminClient({
               key={item.id}
               className="rounded-2xl border border-black/10 bg-[color:var(--surface-100)] p-4"
             >
-              <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+              <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
                 <input
                   className="h-10 rounded-lg border border-black/10 bg-white/90 px-3 text-sm"
                   defaultValue={item.email ?? ""}
                   onBlur={(event) => {
                     const value = event.target.value.trim();
                     if (!value || value === item.email) {
+                      return;
+                    }
+                    if (!validEmail(value)) {
+                      setStatus("Email invalido.");
                       return;
                     }
                     handleUpdatePatient(item.id, { email: value });
@@ -333,9 +432,29 @@ export default function AdminClient({
                     if (!value || value === item.phoneE164) {
                       return;
                     }
+                    if (!validPhone(value)) {
+                      setStatus("Telefone E164 invalido.");
+                      return;
+                    }
                     handleUpdatePatient(item.id, { phoneE164: value });
                   }}
                 />
+                <select
+                  className="h-10 rounded-lg border border-black/10 bg-white/90 px-3 text-xs"
+                  value={item.psychologistUserId ?? ""}
+                  onChange={(event) =>
+                    handleUpdatePatient(item.id, {
+                      psychologistUserId: event.target.value || null,
+                    })
+                  }
+                >
+                  <option value="">Sem psicologo</option>
+                  {activePsychologists.map((psych) => (
+                    <option key={psych.id} value={psych.id}>
+                      {psych.displayName ?? psych.email}
+                    </option>
+                  ))}
+                </select>
                 <select
                   className="h-10 rounded-lg border border-black/10 bg-white/90 px-3 text-xs"
                   defaultValue={item.preferredLanguage}

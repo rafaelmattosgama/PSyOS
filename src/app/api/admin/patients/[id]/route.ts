@@ -11,6 +11,7 @@ const updateSchema = z.object({
   phoneE164: z.string().min(6).optional(),
   isActive: z.boolean().optional(),
   preferredLanguage: z.enum(["PT", "ES", "EN"]).optional(),
+  psychologistUserId: z.string().optional().nullable(),
 });
 
 export async function PATCH(
@@ -60,6 +61,51 @@ export async function PATCH(
     });
   }
 
+  if (body.psychologistUserId !== undefined) {
+    if (body.psychologistUserId) {
+      const psychologist = await prisma.user.findFirst({
+        where: {
+          tenantId: session.user.tenantId,
+          id: body.psychologistUserId,
+          role: "PSYCHOLOGIST",
+        },
+      });
+      if (!psychologist) {
+        return NextResponse.json(
+          { error: "Psychologist not found" },
+          { status: 400 },
+        );
+      }
+    }
+    const existingConversations = await prisma.conversation.findMany({
+      where: { tenantId: session.user.tenantId, patientUserId: id },
+    });
+    if (body.psychologistUserId) {
+      if (existingConversations.length) {
+        await prisma.conversation.updateMany({
+          where: { tenantId: session.user.tenantId, patientUserId: id },
+          data: { psychologistUserId: body.psychologistUserId },
+        });
+      } else {
+        const { generateDek, encryptDek, getMasterKek } = await import(
+          "@/lib/crypto"
+        );
+        const dek = generateDek();
+        const encryptedDek = encryptDek(dek, getMasterKek());
+        await prisma.conversation.create({
+          data: {
+            tenantId: session.user.tenantId,
+            psychologistUserId: body.psychologistUserId,
+            patientUserId: id,
+            aiEnabled: true,
+            language: "ES",
+            encryptedDek,
+          },
+        });
+      }
+    }
+  }
+
   const updated = (await prisma.user.findFirst({
     where: { id, tenantId: session.user.tenantId },
     include: { patientProfile: true },
@@ -97,6 +143,7 @@ export async function PATCH(
       preferredLanguage:
         (updated.patientProfile as { preferredLanguage?: "PT" | "ES" | "EN" })
           ?.preferredLanguage ?? "ES",
+      psychologistUserId: body.psychologistUserId ?? null,
       createdAt: updated.createdAt.toISOString(),
     },
   });

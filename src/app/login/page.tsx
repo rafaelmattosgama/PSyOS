@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n";
 
 type StatusState = {
@@ -9,7 +9,7 @@ type StatusState = {
   message: string;
 };
 
-type Stage = "email" | "login" | "setup" | "not_found";
+type Stage = "email" | "login" | "setup" | "not_found" | "reset_request" | "reset_confirm";
 
 const initialStatus: StatusState = { tone: "idle", message: "" };
 
@@ -31,11 +31,21 @@ async function postJson<T>(url: string, payload: Record<string, unknown>) {
 export default function LoginPage() {
   const { language, setLanguage, t } = useLanguage();
   const [email, setEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [stage, setStage] = useState<Stage>("email");
   const [status, setStatus] = useState<StatusState>(initialStatus);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const token = searchParams.get("reset");
+    if (token) {
+      handleResetViaLink(token, searchParams.get("email"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const setLoading = (message: string) =>
     setStatus({ tone: "loading", message });
@@ -46,11 +56,20 @@ export default function LoginPage() {
 
   const canUseEmail = email.trim().length > 0;
   const canUsePassword = password.trim().length > 0;
+  const hasMinLength = password.length >= 12;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSymbol = /[^A-Za-z0-9]/.test(password);
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const passwordMeetsAll =
+    hasMinLength && hasUpper && hasLower && hasNumber && hasSymbol && passwordsMatch;
 
   const resetFlow = () => {
     setStage("email");
     setPassword("");
     setConfirmPassword("");
+    setResetToken("");
     setStatus(initialStatus);
   };
 
@@ -130,6 +149,63 @@ export default function LoginPage() {
     }
   };
 
+  const handleResetRequest = async () => {
+    if (!canUseEmail) {
+      setError(t.statusEmailRequired);
+      return;
+    }
+    try {
+      setLoading(t.statusCheckEmail);
+      await postJson("/api/auth/password/reset/request", { email });
+      setSuccess(t.resetLinkSent);
+    } catch (error) {
+      setSuccess(t.resetLinkSent);
+    }
+  };
+
+  const handleResetConfirm = async () => {
+    if (!canUseEmail || !passwordMeetsAll) {
+      setError(t.statusSetupRequired);
+      return;
+    }
+    if (!resetToken) {
+      setError("Token ausente.");
+      return;
+    }
+    try {
+      setLoading(t.statusSavingPassword);
+      await postJson("/api/auth/password/reset/confirm", {
+        email,
+        token: resetToken,
+        password,
+        confirmPassword,
+      });
+      setSuccess(t.resetPasswordOk);
+      setStage("login");
+      setPassword("");
+      setConfirmPassword("");
+      setResetToken("");
+    } catch (error) {
+      setError((error as Error).message);
+    }
+  };
+
+  const handleForgotPassword = () => {
+    setStage("reset_request");
+    setPassword("");
+    setConfirmPassword("");
+    setStatus(initialStatus);
+  };
+
+  const handleResetViaLink = (token: string, emailParam: string | null) => {
+    setStage("reset_confirm");
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+    setResetToken(token);
+    setStatus(initialStatus);
+  };
+
   return (
     <div className="min-h-screen px-6 pb-16 pt-12">
       <div className="mx-auto w-full max-w-5xl">
@@ -172,11 +248,16 @@ export default function LoginPage() {
                 onChange={(event) => setEmail(event.target.value)}
                 onFocus={() => setStatus(initialStatus)}
               />
+              {stage === "reset_request" ? (
+                <p className="text-xs text-[color:var(--ink-500)]">
+                  {t.resetPasswordIntro}
+                </p>
+              ) : null}
 
-              {stage === "login" || stage === "setup" ? (
+              {stage === "login" || stage === "setup" || stage === "reset_confirm" ? (
                 <>
                   <label className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-500)]">
-                    {t.labelPassword}
+                    {stage === "reset_confirm" ? t.newPassword : t.labelPassword}
                   </label>
                   <input
                     className="h-12 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
@@ -188,10 +269,10 @@ export default function LoginPage() {
                 </>
               ) : null}
 
-              {stage === "setup" ? (
+              {stage === "setup" || stage === "reset_confirm" ? (
                 <>
                   <label className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-500)]">
-                    {t.labelConfirm}
+                    {stage === "reset_confirm" ? t.confirmNewPassword : t.labelConfirm}
                   </label>
                   <input
                     className="h-12 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
@@ -200,9 +281,42 @@ export default function LoginPage() {
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                   />
-                  <p className="text-xs text-[color:var(--ink-500)]">
-                    {t.rulePassword}
-                  </p>
+                  <div className="rounded-2xl border border-black/10 bg-[color:var(--surface-100)] p-3 text-xs">
+                    <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-500)]">
+                      {t.passwordChecklistTitle}
+                    </p>
+                    <div className="mt-2 space-y-1">
+                      {[
+                        { ok: hasMinLength, label: t.passwordMinLength },
+                        { ok: hasUpper, label: t.passwordUpper },
+                        { ok: hasLower, label: t.passwordLower },
+                        { ok: hasNumber, label: t.passwordNumber },
+                        { ok: hasSymbol, label: t.passwordSymbol },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className={`flex items-center gap-2 ${
+                            item.ok ? "text-emerald-700" : "text-[color:var(--ink-500)]"
+                          }`}
+                        >
+                          <span className="text-[10px]">
+                            {item.ok ? "●" : "○"}
+                          </span>
+                          <span>{item.label}</span>
+                        </div>
+                      ))}
+                      <div
+                        className={`flex items-center gap-2 ${
+                          passwordsMatch ? "text-emerald-700" : "text-[color:var(--ink-500)]"
+                        }`}
+                      >
+                        <span className="text-[10px]">
+                          {passwordsMatch ? "●" : "○"}
+                        </span>
+                        <span>{t.passwordMatch}</span>
+                      </div>
+                    </div>
+                  </div>
                 </>
               ) : null}
             </div>
@@ -233,12 +347,44 @@ export default function LoginPage() {
                   className="h-12 rounded-xl bg-[color:var(--accent-500)] text-sm font-semibold text-white shadow-[0_12px_24px_rgba(196,87,60,0.35)]"
                   type="button"
                   onClick={handlePasswordSetup}
+                  disabled={!passwordMeetsAll}
                 >
                   {t.createPassword}
                 </button>
               ) : null}
 
-              {stage !== "email" ? (
+              {stage === "reset_request" ? (
+                <button
+                  className="h-12 rounded-xl bg-[color:var(--accent-500)] text-sm font-semibold text-white shadow-[0_12px_24px_rgba(196,87,60,0.35)]"
+                  type="button"
+                  onClick={handleResetRequest}
+                >
+                  {t.sendResetLink}
+                </button>
+              ) : null}
+
+              {stage === "reset_confirm" ? (
+                <button
+                  className="h-12 rounded-xl bg-[color:var(--accent-500)] text-sm font-semibold text-white shadow-[0_12px_24px_rgba(196,87,60,0.35)]"
+                  type="button"
+                  onClick={handleResetConfirm}
+                  disabled={!passwordMeetsAll}
+                >
+                  {t.resetPasswordAction}
+                </button>
+              ) : null}
+
+              {stage === "login" ? (
+                <button
+                  className="h-12 rounded-xl border border-black/10 bg-white/80 text-sm font-semibold text-[color:var(--ink-900)]"
+                  type="button"
+                  onClick={handleForgotPassword}
+                >
+                  {t.forgotPassword}
+                </button>
+              ) : null}
+
+              {stage !== "email" && stage !== "reset_request" ? (
                 <button
                   className="h-12 rounded-xl border border-black/10 bg-white/80 text-sm font-semibold text-[color:var(--ink-900)]"
                   type="button"

@@ -139,6 +139,7 @@ export async function POST(request: Request) {
       displayName: patient.patientProfile?.displayName ?? null,
       phoneE164: patient.patientProfile?.phoneE164 ?? null,
       preferredLanguage: patient.patientProfile?.preferredLanguage ?? "ES",
+      psychologistUserId: body.psychologistUserId ?? null,
       createdAt: patient.createdAt.toISOString(),
     },
   });

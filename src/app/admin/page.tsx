@@ -35,14 +35,21 @@ export default async function AdminPage() {
     }),
   ]);
 
-  const patientAssignments = new Map(
-    conversations.map((conv) => [
-      conv.patientUserId,
-      conv.psychologist.psychologistProfile?.displayName ??
-        conv.psychologist.email ??
-        "Psicologo",
-    ]),
+  const patientAssignments = new Map<string, { id: string; name: string }>();
+  const sorted = [...conversations].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
   );
+  for (const conv of sorted) {
+    if (!patientAssignments.has(conv.patientUserId)) {
+      patientAssignments.set(conv.patientUserId, {
+        id: conv.psychologistUserId,
+        name:
+          conv.psychologist.psychologistProfile?.displayName ??
+          conv.psychologist.email ??
+          "Psicologo",
+      });
+    }
+  }
 
   const mappedPsychologists = psychologists.map((user) => ({
     id: user.id,
@@ -61,7 +68,8 @@ export default async function AdminPage() {
     preferredLanguage:
       (user.patientProfile as { preferredLanguage?: "PT" | "ES" | "EN" })
         ?.preferredLanguage ?? "ES",
-    psychologistName: patientAssignments.get(user.id) ?? null,
+    psychologistUserId: patientAssignments.get(user.id)?.id ?? null,
+    psychologistName: patientAssignments.get(user.id)?.name ?? null,
     createdAt: user.createdAt.toISOString(),
   }));
 
