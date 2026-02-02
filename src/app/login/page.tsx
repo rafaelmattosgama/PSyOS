@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n";
 
@@ -37,15 +37,17 @@ export default function LoginPage() {
   const [stage, setStage] = useState<Stage>("email");
   const [status, setStatus] = useState<StatusState>(initialStatus);
   const router = useRouter();
-  const searchParams = useSearchParams();
-
   useEffect(() => {
-    const token = searchParams.get("reset");
+    if (typeof window === "undefined") {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("reset");
     if (token) {
-      handleResetViaLink(token, searchParams.get("email"));
+      handleResetViaLink(token, params.get("email"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, []);
 
   const setLoading = (message: string) =>
     setStatus({ tone: "loading", message });
