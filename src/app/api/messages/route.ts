@@ -47,6 +47,8 @@ export async function GET(request: Request) {
     authorType: message.authorType,
     createdAt: message.createdAt,
     content: decryptMessage(message.ciphertext, message.iv, message.authTag, dek),
+    hasAttachment: Boolean((message as { attachmentCiphertext?: string }).attachmentCiphertext),
+    attachmentMime: (message as { attachmentMime?: string | null }).attachmentMime ?? null,
   }));
 
   await logAuditEvent({

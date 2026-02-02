@@ -19,11 +19,129 @@ type MessageItem = {
   authorType: "PATIENT" | "PSYCHOLOGIST" | "AI" | "SYSTEM";
   content: string;
   createdAt: string;
+  hasAttachment?: boolean;
+  attachmentMime?: string | null;
 };
 
 type Props = {
   tenantId: string;
 };
+
+const formatAudioTime = (value: number) => {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0:00";
+  }
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.floor(value % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
+};
+
+function AudioMessage({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+    if (audio.paused) {
+      await audio.play();
+      setIsPlaying(true);
+    } else {
+      audio.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+    const next = Number(event.target.value);
+    audio.currentTime = next;
+    setCurrentTime(next);
+  };
+
+  return (
+    <div className="flex w-full items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-3 py-2 shadow-[0_10px_24px_var(--shadow-color)]">
+      <audio
+        ref={audioRef}
+        src={src}
+        className="hidden"
+        onLoadedMetadata={() => {
+          const audio = audioRef.current;
+          if (!audio) {
+            return;
+          }
+          setDuration(audio.duration || 0);
+        }}
+        onTimeUpdate={() => {
+          const audio = audioRef.current;
+          if (!audio) {
+            return;
+          }
+          setCurrentTime(audio.currentTime || 0);
+        }}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+      />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--accent-500)] text-white"
+        aria-label={isPlaying ? "Pausar audio" : "Tocar audio"}
+      >
+        {isPlaying ? (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
+        ) : (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="currentColor"
+          >
+            <path d="M8 5v14l11-7-11-7Z" />
+          </svg>
+        )}
+      </button>
+      <div className="flex flex-1 flex-col gap-1">
+        <input
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={0.1}
+          value={Math.min(currentTime, duration || 0)}
+          onChange={handleSeek}
+          className="h-2 w-full accent-[color:var(--accent-500)]"
+        />
+        <div className="flex items-center justify-between text-[11px] text-[color:var(--ink-500)]">
+          <span>{formatAudioTime(currentTime)}</span>
+          <span>{formatAudioTime(duration)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 async function getJson<T>(url: string) {
   const response = await fetch(url, { method: "GET" });
@@ -63,6 +181,14 @@ export default function PatientClient({ tenantId }: Props) {
   const shouldAutoScrollRef = useRef(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordTimerRef = useRef<number | null>(null);
+  const [pendingAudioUrl, setPendingAudioUrl] = useState<string | null>(null);
+  const [pendingAudioBlob, setPendingAudioBlob] = useState<Blob | null>(null);
+  const MAX_RECORD_SECONDS = 120;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const selectedConversation = useMemo(
@@ -139,6 +265,131 @@ export default function PatientClient({ tenantId }: Props) {
     }
   };
 
+  const sendAudioBlob = async (blob: Blob) => {
+    if (!selectedId) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const form = new FormData();
+      form.append("tenantId", tenantId);
+      form.append("conversationId", selectedId);
+      form.append("file", new File([blob], "audio.webm", { type: blob.type }));
+      const response = await fetch("/api/messages/audio", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Request failed");
+      }
+      await loadMessages(selectedId);
+    } catch (error) {
+      setStatus((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!selectedId || isRecording) {
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus("Gravacao de audio nao suportada neste navegador.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(recordChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        recordChunksRef.current = [];
+        if (blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          setPendingAudioBlob(blob);
+          setPendingAudioUrl(url);
+        }
+        setRecordSeconds(0);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = window.setInterval(() => {
+        setRecordSeconds((current) => {
+          const next = current + 1;
+          if (next >= MAX_RECORD_SECONDS) {
+            stopRecording();
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (error) {
+      setStatus((error as Error).message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current) {
+      return;
+    }
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    if (recordTimerRef.current) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
+    if (recordTimerRef.current) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    recordChunksRef.current = [];
+    if (pendingAudioUrl) {
+      URL.revokeObjectURL(pendingAudioUrl);
+    }
+    setPendingAudioUrl(null);
+    setPendingAudioBlob(null);
+  };
+
+  const formatSeconds = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${remaining
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  const sendPendingAudio = async () => {
+    if (!pendingAudioBlob) {
+      return;
+    }
+    await sendAudioBlob(pendingAudioBlob);
+    if (pendingAudioUrl) {
+      URL.revokeObjectURL(pendingAudioUrl);
+    }
+    setPendingAudioUrl(null);
+    setPendingAudioBlob(null);
+  };
+
   useEffect(() => {
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,18 +437,16 @@ export default function PatientClient({ tenantId }: Props) {
   const asideContent = (
     <div className="flex flex-col gap-6">
       <div className="rounded-[28px] border border-black/10 bg-white/80 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-              {t.patientListTitle}
-            </p>
-            <h1 className="mt-2 text-2xl text-[color:var(--ink-900)]">
-              {t.patientPortalTitle}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
+            {t.patientListTitle}
+          </p>
+          <h1 className="mt-2 text-2xl text-[color:var(--ink-900)]">
+            {t.patientPortalTitle}
+          </h1>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <select
-              className="h-9 rounded-full border border-black/10 bg-white/80 px-3 text-xs font-semibold text-[color:var(--ink-900)]"
+              className="h-8 rounded-full border border-black/10 bg-white/90 px-3 text-xs font-semibold text-[color:var(--ink-900)]"
               value={language}
               onChange={(event) =>
                 setLanguage(event.target.value as typeof language)
@@ -210,13 +459,6 @@ export default function PatientClient({ tenantId }: Props) {
                 </option>
               ))}
             </select>
-            <button
-              className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)]"
-              type="button"
-              onClick={loadConversations}
-            >
-              {t.patientUpdated}
-            </button>
           </div>
         </div>
 
@@ -381,12 +623,26 @@ export default function PatientClient({ tenantId }: Props) {
                         : "bg-[color:var(--surface-100)] text-[color:var(--ink-900)]"
                   }`}
                 >
-                    <p className="text-xs uppercase tracking-[0.2em] opacity-70">
-                      {message.authorType === "PATIENT"
-                        ? t.patientYou
-                        : message.authorType}
+                    {message.authorType !== "PATIENT" ? (
+                      <p className="text-xs uppercase tracking-[0.2em] opacity-70">
+                        {message.authorType === "AI"
+                          ? t.assistantLabel
+                          : selectedConversation?.psychologist.psychologistProfile
+                              ?.displayName ??
+                            selectedConversation?.psychologist.email ??
+                            t.patientDefaultPsychologist}
+                      </p>
+                    ) : null}
+                    <p className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
+                      {message.content}
                     </p>
-                    <p className="mt-2">{message.content}</p>
+                    {message.hasAttachment ? (
+                      <div className="mt-3">
+                        <AudioMessage
+                          src={`/api/messages/attachment?messageId=${message.id}`}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -402,26 +658,170 @@ export default function PatientClient({ tenantId }: Props) {
             ) : null}
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 border-t border-black/10 pt-4 sm:flex-row">
-            <textarea
-              ref={messageInputRef}
-              className="min-h-[96px] max-h-[240px] flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
-              placeholder={t.patientSendPlaceholder}
-              value={messageDraft}
-              onChange={(event) => {
-                setMessageDraft(event.target.value);
-                adjustTextareaHeight(event.currentTarget);
-              }}
-              disabled={!selectedId}
-            />
-            <button
-              className="h-12 rounded-xl bg-[color:var(--accent-500)] px-6 text-sm font-semibold text-white sm:self-end"
-              type="button"
-              onClick={handleSendMessage}
-              disabled={loading || !selectedId}
+          <div className="mt-6 flex flex-col gap-3 border-t border-black/10 pt-4 sm:flex-row sm:items-start">
+            {isRecording || pendingAudioBlob ? null : (
+              <textarea
+                ref={messageInputRef}
+                className="min-h-[96px] max-h-[240px] flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
+                placeholder={t.patientSendPlaceholder}
+                value={messageDraft}
+                onChange={(event) => {
+                  setMessageDraft(event.target.value);
+                  adjustTextareaHeight(event.currentTarget);
+                }}
+                disabled={!selectedId}
+              />
+            )}
+            <div
+              className={`flex gap-3 ${
+                pendingAudioBlob || isRecording
+                  ? "w-full flex-col items-stretch"
+                  : "flex-1 items-end justify-end min-w-[88px]"
+              }`}
             >
-              {t.patientSend}
-            </button>
+              {isRecording ? (
+                <div className="flex w-full flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs text-[color:var(--ink-500)]">
+                    <span>Gravando audio</span>
+                    <span>{formatSeconds(recordSeconds)}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full bg-red-500"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round((recordSeconds / MAX_RECORD_SECONDS) * 100),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {pendingAudioUrl ? (
+                <div className="flex w-full flex-col gap-2">
+                  <audio controls src={pendingAudioUrl} className="w-full" />
+                  <div className="flex items-center justify-between text-xs text-[color:var(--ink-500)]">
+                    <span>Previa do audio</span>
+                    <span>{formatSeconds(recordSeconds)}</span>
+                  </div>
+                </div>
+              ) : null}
+              <div
+                className={`flex w-full items-center gap-2 ${
+                  pendingAudioBlob || isRecording ? "justify-between" : "justify-end"
+                }`}
+              >
+                {!isRecording && !pendingAudioBlob && !messageDraft.trim() ? (
+                  <button
+                    className="flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/90 text-[color:var(--ink-900)]"
+                    type="button"
+                    onClick={startRecording}
+                    disabled={loading || !selectedId}
+                    aria-label="Gravar audio"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v4a3 3 0 0 0 3 3Z" />
+                      <path d="M5 11a7 7 0 0 0 14 0" />
+                      <path d="M12 18v3" />
+                      <path d="M8 21h8" />
+                    </svg>
+                  </button>
+                ) : null}
+                {isRecording || pendingAudioBlob ? (
+                  <button
+                    className="flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/90 text-[color:var(--ink-900)]"
+                    type="button"
+                    onClick={cancelRecording}
+                    aria-label="Descartar audio"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-5 w-5 text-[color:var(--ink-900)]"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M6 6l1 14h10l1-14" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                    </svg>
+                  </button>
+                ) : null}
+                {isRecording ? (
+                  <button
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white"
+                    type="button"
+                    onClick={stopRecording}
+                    aria-label="Parar gravacao"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="6" y="5" width="4" height="14" rx="1" />
+                      <rect x="14" y="5" width="4" height="14" rx="1" />
+                    </svg>
+                  </button>
+                ) : null}
+                {pendingAudioBlob ? (
+                  <button
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--accent-500)] text-white"
+                    type="button"
+                    onClick={sendPendingAudio}
+                    disabled={loading}
+                    aria-label="Enviar audio"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-5 w-5"
+                      fill="currentColor"
+                    >
+                      <path d="M2 21 21 12 2 3v7l13 2-13 2v7Z" />
+                    </svg>
+                  </button>
+                ) : null}
+                {!isRecording && !pendingAudioBlob && messageDraft.trim() ? (
+                  <button
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--accent-500)] text-white sm:self-end"
+                    type="button"
+                    onClick={handleSendMessage}
+                    disabled={loading || !selectedId || isRecording}
+                    aria-label={t.patientSend}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-5 w-5"
+                      fill="currentColor"
+                    >
+                      <path d="M2 21 21 12 2 3v7l13 2-13 2v7Z" />
+                    </svg>
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
 

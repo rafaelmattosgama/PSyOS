@@ -62,6 +62,29 @@ export function encryptMessage(plaintext: string, dek: Buffer) {
   };
 }
 
+export function encryptBytes(plaintext: Buffer, dek: Buffer) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", dek, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    ciphertext: toBase64(ciphertext),
+    iv: toBase64(iv),
+    authTag: toBase64(authTag),
+  };
+}
+
+export function decryptBytes(
+  ciphertext: string,
+  iv: string,
+  authTag: string,
+  dek: Buffer,
+): Buffer {
+  const decipher = createDecipheriv("aes-256-gcm", dek, fromBase64(iv));
+  decipher.setAuthTag(fromBase64(authTag));
+  return Buffer.concat([decipher.update(fromBase64(ciphertext)), decipher.final()]);
+}
+
 export function decryptMessage(
   ciphertext: string,
   iv: string,

@@ -146,6 +146,11 @@ model Message {
   ciphertext        String
   iv                String
   authTag           String
+  attachmentCiphertext String?
+  attachmentIv         String?
+  attachmentAuthTag    String?
+  attachmentMime       String?
+  attachmentSize       Int?
   externalMessageId String?
   createdAt         DateTime @default(now())
 

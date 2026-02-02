@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { resolveHomeForUser } from "@/lib/auth/portal";
 import PsychologistClient from "@/app/app/PsychologistClient";
+import { prisma } from "@/lib/prisma";
 
 export default async function PsychologistPage() {
   const session = await getSession();
@@ -15,9 +16,16 @@ export default async function PsychologistPage() {
     redirect(resolveHomeForUser(session.user));
   }
 
+  const profile = await prisma.psychologistProfile.findUnique({
+    where: { userId: session.user.id },
+  });
+
   return (
     <div className="min-h-screen px-6 pb-12 pt-10">
-      <PsychologistClient tenantId={session.user.tenantId} />
+      <PsychologistClient
+        tenantId={session.user.tenantId}
+        psychologistName={profile?.displayName ?? session.user.email ?? "Psicólogo"}
+      />
     </div>
   );
 }
