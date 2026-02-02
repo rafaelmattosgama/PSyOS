@@ -16,6 +16,7 @@ type Patient = {
   isActive: boolean;
   displayName: string | null;
   phoneE164: string | null;
+  preferredLanguage: "PT" | "ES" | "EN";
   psychologistName?: string | null;
   createdAt: string;
 };
@@ -69,6 +70,9 @@ export default function AdminClient({
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
   const [newPatientPsychologist, setNewPatientPsychologist] = useState("");
+  const [newPatientLanguage, setNewPatientLanguage] = useState<
+    Patient["preferredLanguage"]
+  >("ES");
 
   const activePsychologists = useMemo(
     () => psychologists.filter((item) => item.isActive),
@@ -121,12 +125,14 @@ export default function AdminClient({
         displayName: newPatientName,
         phoneE164: newPatientPhone,
         psychologistUserId: newPatientPsychologist || undefined,
+        preferredLanguage: newPatientLanguage,
       });
       setPatients([data.patient, ...patients]);
       setNewPatientEmail("");
       setNewPatientName("");
       setNewPatientPhone("");
       setNewPatientPsychologist("");
+      setNewPatientLanguage("ES");
       setStatus("Paciente criado.");
     } catch (error) {
       setStatus((error as Error).message);
@@ -239,7 +245,7 @@ export default function AdminClient({
 
       <section className="rounded-[28px] border border-black/10 bg-white/80 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
         <h2 className="text-2xl text-[color:var(--ink-900)]">Pacientes</h2>
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
           <input
             className="h-11 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
             placeholder="Email do paciente"
@@ -270,6 +276,17 @@ export default function AdminClient({
               </option>
             ))}
           </select>
+          <select
+            className="h-11 rounded-xl border border-black/10 bg-white/90 px-3 text-sm"
+            value={newPatientLanguage}
+            onChange={(event) =>
+              setNewPatientLanguage(event.target.value as Patient["preferredLanguage"])
+            }
+          >
+            <option value="ES">Espanhol</option>
+            <option value="PT">Portugues</option>
+            <option value="EN">Ingles</option>
+          </select>
           <button
             className="h-11 rounded-xl bg-[color:var(--accent-500)] px-4 text-sm font-semibold text-white"
             type="button"
@@ -285,7 +302,7 @@ export default function AdminClient({
               key={item.id}
               className="rounded-2xl border border-black/10 bg-[color:var(--surface-100)] p-4"
             >
-              <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+              <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
                 <input
                   className="h-10 rounded-lg border border-black/10 bg-white/90 px-3 text-sm"
                   defaultValue={item.email ?? ""}
@@ -319,6 +336,19 @@ export default function AdminClient({
                     handleUpdatePatient(item.id, { phoneE164: value });
                   }}
                 />
+                <select
+                  className="h-10 rounded-lg border border-black/10 bg-white/90 px-3 text-xs"
+                  defaultValue={item.preferredLanguage}
+                  onChange={(event) =>
+                    handleUpdatePatient(item.id, {
+                      preferredLanguage: event.target.value as Patient["preferredLanguage"],
+                    })
+                  }
+                >
+                  <option value="ES">Espanhol</option>
+                  <option value="PT">Portugues</option>
+                  <option value="EN">Ingles</option>
+                </select>
                 <button
                   className={`h-10 rounded-lg px-3 text-xs font-semibold ${
                     item.isActive

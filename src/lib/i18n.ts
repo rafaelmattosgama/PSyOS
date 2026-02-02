@@ -1,0 +1,229 @@
+import { useEffect, useMemo, useState } from "react";
+
+export type Language = "es" | "pt" | "en";
+
+export const DEFAULT_LANGUAGE: Language = "es";
+
+export const LANGUAGE_OPTIONS: Array<{ value: Language; label: string }> = [
+  { value: "es", label: "Español" },
+  { value: "pt", label: "Português" },
+  { value: "en", label: "English" },
+];
+
+const STORAGE_KEY = "psyos_language";
+
+const translations = {
+  es: {
+    brandTag: "PsyOS",
+    brandSubtitle: "Plataforma clínica multi-tenant",
+    homeTag: "Acompañamiento entre sesiones",
+    homeTitle:
+      "Un espacio seguro para que el paciente registre lo que siente y siga en contacto con su psicóloga.",
+    homeBody:
+      "El paciente puede escribir por WhatsApp o por el portal web, manteniendo el historial organizado y accesible para que la psicóloga acompañe entre sesiones.",
+    homeCta: "Entrar al sistema",
+    homeLogin: "Entrar",
+    card1Title: "Privacidad primero",
+    card1Detail: "Conversaciones protegidas para que el paciente se sienta seguro.",
+    card2Title: "Continuidad entre sesiones",
+    card2Detail: "Registro claro de lo que ocurrió día a día.",
+    card3Title: "Soporte con respeto clínico",
+    card3Detail: "Orientación sin reemplazar la terapia.",
+    loginTitle: "Entrar",
+    loginSubtitle:
+      "Ingresa tu email. Si ya existe, pedimos la contraseña. Si es el primer acceso, pedimos crear la contraseña.",
+    secureAccess: "Acceso seguro",
+    labelEmail: "Email",
+    labelPassword: "Contraseña",
+    labelConfirm: "Confirmar contraseña",
+    placeholderEmail: "admin@psyos.local",
+    placeholderPassword: "Tu contraseña",
+    placeholderConfirm: "Repite la contraseña",
+    rulePassword: "Mínimo 12 caracteres, mayúscula, minúscula, número y símbolo.",
+    continue: "Continuar",
+    login: "Entrar",
+    createPassword: "Crear contraseña",
+    useAnotherEmail: "Usar otro email",
+    demoAccounts: "Cuentas demo",
+    demoPassword: "Contraseña demo: 123456",
+    tenantHint: "El tenant se identifica automáticamente por el email.",
+    statusCheckEmail: "Verificando email...",
+    statusEmailRequired: "Ingresa el email.",
+    statusEmailFound: "Email encontrado. Ingresa la contraseña.",
+    statusFirstAccess: "Primer acceso. Define una contraseña.",
+    statusEmailNotFound: "Email no encontrado.",
+    statusLoginRequired: "Ingresa email y contraseña.",
+    statusAuth: "Autenticando con contraseña...",
+    statusLoginOk: "Login con contraseña ok.",
+    statusSetupRequired: "Ingresa email y las dos contraseñas.",
+    statusMismatch: "Las contraseñas no coinciden.",
+    statusSavingPassword: "Guardando contraseña...",
+    statusPasswordCreated: "Contraseña creada. Entrando...",
+    patientPortalTitle: "Portal del Paciente",
+    patientListTitle: "Tus conversaciones",
+    patientUpdated: "Actualizando...",
+    patientHistoryTag: "Historial",
+    patientConversationWith: "Conversación con",
+    patientDefaultPsychologist: "tu psicóloga",
+    patientNoConversation: "Selecciona una conversación",
+    patientAiOn: "IA habilitada",
+    patientAiOff: "IA desactivada",
+    patientNoConversations: "Aún no tienes conversaciones asignadas.",
+    patientWhatsAppHint:
+      "Puedes usar WhatsApp o la web. El historial aparece aquí en un solo lugar.",
+    patientSendPlaceholder: "Escribe tu mensaje...",
+    patientSend: "Enviar",
+    patientScrollBottom: "Ir al final",
+    patientYou: "Tú",
+    loading: "Cargando...",
+  },
+  pt: {
+    brandTag: "PsyOS",
+    brandSubtitle: "Plataforma clínica multi-tenant",
+    homeTag: "Acompanhamento entre sessões",
+    homeTitle:
+      "Um espaço seguro para o paciente registrar o que sente e seguir em contato com sua psicóloga.",
+    homeBody:
+      "O paciente pode escrever pelo WhatsApp ou pelo portal web, mantendo o histórico organizado e acessível para a psicóloga acompanhar entre as sessões.",
+    homeCta: "Entrar no sistema",
+    homeLogin: "Entrar",
+    card1Title: "Privacidade em primeiro lugar",
+    card1Detail: "Conversas protegidas para o paciente se sentir seguro.",
+    card2Title: "Continuidade entre sessões",
+    card2Detail: "Registro claro do que aconteceu no dia a dia.",
+    card3Title: "Suporte com respeito clínico",
+    card3Detail: "Orientação sem substituir a terapia.",
+    loginTitle: "Entrar",
+    loginSubtitle:
+      "Informe o email. Se já existir, pedimos a senha. Se for o primeiro acesso, pedimos para criar a senha.",
+    secureAccess: "Acesso seguro",
+    labelEmail: "Email",
+    labelPassword: "Senha",
+    labelConfirm: "Confirmar senha",
+    placeholderEmail: "admin@psyos.local",
+    placeholderPassword: "Sua senha",
+    placeholderConfirm: "Repita a senha",
+    rulePassword: "Mínimo 12 caracteres, maiúscula, minúscula, número e símbolo.",
+    continue: "Continuar",
+    login: "Entrar",
+    createPassword: "Criar senha",
+    useAnotherEmail: "Usar outro email",
+    demoAccounts: "Contas demo",
+    demoPassword: "Senha demo: 123456",
+    tenantHint: "O tenant é identificado automaticamente pelo email.",
+    statusCheckEmail: "Verificando email...",
+    statusEmailRequired: "Informe o email.",
+    statusEmailFound: "Email encontrado. Informe a senha.",
+    statusFirstAccess: "Primeiro acesso. Defina uma senha.",
+    statusEmailNotFound: "Email não encontrado.",
+    statusLoginRequired: "Informe email e senha.",
+    statusAuth: "Autenticando com senha...",
+    statusLoginOk: "Login com senha ok.",
+    statusSetupRequired: "Informe email e as duas senhas.",
+    statusMismatch: "As senhas não conferem.",
+    statusSavingPassword: "Salvando senha...",
+    statusPasswordCreated: "Senha criada. Entrando...",
+    patientPortalTitle: "Portal do Paciente",
+    patientListTitle: "Suas conversas",
+    patientUpdated: "Atualizar",
+    patientHistoryTag: "Histórico",
+    patientConversationWith: "Conversa com",
+    patientDefaultPsychologist: "sua psicóloga",
+    patientNoConversation: "Selecione uma conversa",
+    patientAiOn: "IA habilitada",
+    patientAiOff: "IA desativada",
+    patientNoConversations: "Nenhuma conversa atribuída ainda.",
+    patientWhatsAppHint:
+      "Você pode usar WhatsApp ou web. O histórico aparece aqui em um só lugar.",
+    patientSendPlaceholder: "Digite sua mensagem...",
+    patientSend: "Enviar",
+    patientScrollBottom: "Ir para o fim",
+    patientYou: "Você",
+    loading: "Carregando...",
+  },
+  en: {
+    brandTag: "PsyOS",
+    brandSubtitle: "Multi-tenant clinical platform",
+    homeTag: "Between-session support",
+    homeTitle:
+      "A safe space for patients to record how they feel and stay in touch with their psychologist.",
+    homeBody:
+      "Patients can write via WhatsApp or the web portal, keeping the history organized and accessible for follow-up between sessions.",
+    homeCta: "Access the system",
+    homeLogin: "Sign in",
+    card1Title: "Privacy first",
+    card1Detail: "Protected conversations so patients feel safe.",
+    card2Title: "Continuity between sessions",
+    card2Detail: "A clear record of what happened day to day.",
+    card3Title: "Clinical-respectful support",
+    card3Detail: "Guidance without replacing therapy.",
+    loginTitle: "Sign in",
+    loginSubtitle:
+      "Enter your email. If it exists, we ask for your password. If it is the first access, we ask you to create a password.",
+    secureAccess: "Secure access",
+    labelEmail: "Email",
+    labelPassword: "Password",
+    labelConfirm: "Confirm password",
+    placeholderEmail: "admin@psyos.local",
+    placeholderPassword: "Your password",
+    placeholderConfirm: "Repeat the password",
+    rulePassword:
+      "Minimum 12 characters, uppercase, lowercase, number and symbol.",
+    continue: "Continue",
+    login: "Sign in",
+    createPassword: "Create password",
+    useAnotherEmail: "Use another email",
+    demoAccounts: "Demo accounts",
+    demoPassword: "Demo password: 123456",
+    tenantHint: "Tenant is automatically identified by email.",
+    statusCheckEmail: "Checking email...",
+    statusEmailRequired: "Enter the email.",
+    statusEmailFound: "Email found. Enter the password.",
+    statusFirstAccess: "First access. Set a password.",
+    statusEmailNotFound: "Email not found.",
+    statusLoginRequired: "Enter email and password.",
+    statusAuth: "Authenticating with password...",
+    statusLoginOk: "Password login ok.",
+    statusSetupRequired: "Enter email and both passwords.",
+    statusMismatch: "Passwords do not match.",
+    statusSavingPassword: "Saving password...",
+    statusPasswordCreated: "Password created. Signing in...",
+    patientPortalTitle: "Patient Portal",
+    patientListTitle: "Your conversations",
+    patientUpdated: "Refresh",
+    patientHistoryTag: "History",
+    patientConversationWith: "Conversation with",
+    patientDefaultPsychologist: "your psychologist",
+    patientNoConversation: "Select a conversation",
+    patientAiOn: "AI enabled",
+    patientAiOff: "AI disabled",
+    patientNoConversations: "No conversations assigned yet.",
+    patientWhatsAppHint:
+      "You can use WhatsApp or the web. The history appears here in one place.",
+    patientSendPlaceholder: "Write your message...",
+    patientSend: "Send",
+    patientScrollBottom: "Go to bottom",
+    patientYou: "You",
+    loading: "Loading...",
+  },
+};
+
+export function useLanguage() {
+  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY) as Language | null;
+    if (stored && ["es", "pt", "en"].includes(stored)) {
+      setLanguage(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, language);
+    document.documentElement.lang = language;
+  }, [language]);
+
+  const t = useMemo(() => translations[language], [language]);
+
+  return { language, setLanguage, t };
+}

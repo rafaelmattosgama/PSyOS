@@ -31,6 +31,12 @@ enum ConversationStatus {
   ARCHIVED
 }
 
+enum Language {
+  PT
+  ES
+  EN
+}
+
 model Tenant {
   id        String   @id @default(cuid())
   name      String
@@ -98,6 +104,7 @@ model PatientProfile {
   userId      String @id
   displayName String
   phoneE164   String
+  preferredLanguage Language @default(ES)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -111,6 +118,7 @@ model Conversation {
   patientUserId      String
   status             ConversationStatus @default(OPEN)
   aiEnabled          Boolean            @default(true)
+  language           Language           @default(ES)
   encryptedDek       String
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt

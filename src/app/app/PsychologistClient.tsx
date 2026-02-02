@@ -16,7 +16,10 @@ type ConversationItem = {
   patient: {
     id: string;
     email: string | null;
-    patientProfile?: { displayName?: string | null } | null;
+    patientProfile?: {
+      displayName?: string | null;
+      preferredLanguage?: "PT" | "ES" | "EN";
+    } | null;
   };
 };
 
@@ -98,7 +101,7 @@ const demoConversation: ConversationItem = {
   patient: {
     id: "demo-patient",
     email: "paciente.demo@psyos.local",
-    patientProfile: { displayName: "Paciente demo" },
+    patientProfile: { displayName: "Paciente demo", preferredLanguage: "ES" },
   },
 };
 
@@ -123,6 +126,12 @@ const demoMessages: MessageItem[] = [
     createdAt: new Date().toISOString(),
   },
 ];
+
+const LANGUAGE_DIRECTIVE: Record<"PT" | "ES" | "EN", string> = {
+  PT: "Responda sempre em portugues.",
+  ES: "Responda sempre em espanhol.",
+  EN: "Respond in English.",
+};
 
 async function getJson<T>(url: string) {
   const response = await fetch(url, { method: "GET" });
@@ -534,7 +543,10 @@ export default function PsychologistClient({ tenantId }: Props) {
     const policyBlocks = [psychPolicy, conversationPolicy]
       .map((text) => text.trim())
       .filter(Boolean);
+    const preferredLanguage =
+      selectedConversation?.patient.patientProfile?.preferredLanguage ?? "ES";
     const extraDirectives = [
+      LANGUAGE_DIRECTIVE[preferredLanguage],
       localSignals.anger ? signalConfig.anger.directive : "",
       localSignals.disconnect ? signalConfig.disconnect.directive : "",
       localSignals.rumination ? signalConfig.rumination.directive : "",
@@ -896,8 +908,13 @@ export default function PsychologistClient({ tenantId }: Props) {
                 {selectedConversation?.aiEnabled ? "IA habilitada" : "IA desativada"}
               </span>
               <span className="text-xs text-[color:var(--ink-500)]">
+                Idioma do paciente:{" "}
+                {selectedConversation?.patient.patientProfile?.preferredLanguage ??
+                  "ES"}
+              </span>
+              <span className="text-xs text-[color:var(--ink-500)]">
                 Episodio:{" "}
-                {aiTurnsUsed === null ? "-" : `${aiTurnsUsed}/3`}
+                {aiTurnsUsed === null ? "-" : `${aiTurnsUsed}/${aiMaxTurns}`}
                 {episodeOpen === false ? " (fechado)" : ""}
               </span>
               <button

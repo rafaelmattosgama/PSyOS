@@ -58,6 +58,9 @@ export default async function AdminPage() {
     isActive: user.isActive,
     displayName: user.patientProfile?.displayName ?? null,
     phoneE164: user.patientProfile?.phoneE164 ?? null,
+    preferredLanguage:
+      (user.patientProfile as { preferredLanguage?: "PT" | "ES" | "EN" })
+        ?.preferredLanguage ?? "ES",
     psychologistName: patientAssignments.get(user.id) ?? null,
     createdAt: user.createdAt.toISOString(),
   }));

@@ -10,6 +10,7 @@ const updateSchema = z.object({
   displayName: z.string().min(1).optional(),
   phoneE164: z.string().min(6).optional(),
   isActive: z.boolean().optional(),
+  preferredLanguage: z.enum(["PT", "ES", "EN"]).optional(),
 });
 
 export async function PATCH(
@@ -48,20 +49,31 @@ export async function PATCH(
     },
   });
 
-  if (body.displayName || body.phoneE164) {
+  if (body.displayName || body.phoneE164 || body.preferredLanguage) {
     await prisma.patientProfile.updateMany({
       where: { userId: id },
       data: {
         displayName: body.displayName,
         phoneE164: body.phoneE164,
-      },
+        preferredLanguage: body.preferredLanguage,
+      } as any,
     });
   }
 
-  const updated = await prisma.user.findFirst({
+  const updated = (await prisma.user.findFirst({
     where: { id, tenantId: session.user.tenantId },
     include: { patientProfile: true },
-  });
+  })) as unknown as {
+    id: string;
+    email: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    patientProfile?: {
+      displayName?: string | null;
+      phoneE164?: string | null;
+      preferredLanguage?: "PT" | "ES" | "EN";
+    } | null;
+  };
 
   if (!updated) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -82,6 +94,9 @@ export async function PATCH(
       isActive: updated.isActive,
       displayName: updated.patientProfile?.displayName ?? null,
       phoneE164: updated.patientProfile?.phoneE164 ?? null,
+      preferredLanguage:
+        (updated.patientProfile as { preferredLanguage?: "PT" | "ES" | "EN" })
+          ?.preferredLanguage ?? "ES",
       createdAt: updated.createdAt.toISOString(),
     },
   });

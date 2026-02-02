@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n";
 
 type ConversationItem = {
   id: string;
@@ -51,6 +52,7 @@ async function postJson<T>(url: string, payload: Record<string, unknown>) {
 }
 
 export default function PatientClient({ tenantId }: Props) {
+  const { language, setLanguage, t } = useLanguage();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -187,25 +189,41 @@ export default function PatientClient({ tenantId }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-              Suas conversas
+              {t.patientListTitle}
             </p>
             <h1 className="mt-2 text-2xl text-[color:var(--ink-900)]">
-              Portal do Paciente
+              {t.patientPortalTitle}
             </h1>
           </div>
-          <button
-            className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)]"
-            type="button"
-            onClick={loadConversations}
-          >
-            Atualizar
-          </button>
+          <div className="flex items-center gap-2">
+            <select
+              className="h-9 rounded-full border border-black/10 bg-white/80 px-3 text-xs font-semibold text-[color:var(--ink-900)]"
+              value={language}
+              onChange={(event) =>
+                setLanguage(event.target.value as typeof language)
+              }
+              aria-label="Idioma"
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)]"
+              type="button"
+              onClick={loadConversations}
+            >
+              {t.patientUpdated}
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 space-y-3">
           {conversations.length === 0 ? (
             <div className="rounded-2xl border border-black/10 bg-[color:var(--surface-100)] p-4 text-sm text-[color:var(--ink-500)]">
-              Nenhuma conversa atribuida ainda.
+              {t.patientNoConversations}
             </div>
           ) : null}
 
@@ -247,7 +265,7 @@ export default function PatientClient({ tenantId }: Props) {
       </div>
 
       <div className="rounded-[28px] border border-black/10 bg-white/80 p-6 text-sm text-[color:var(--ink-500)]">
-        Voce pode usar WhatsApp ou web. O historico aparece aqui em um so lugar.
+        {t.patientWhatsAppHint}
       </div>
     </div>
   );
@@ -312,17 +330,17 @@ export default function PatientClient({ tenantId }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-                Historico
+                {t.patientHistoryTag}
               </p>
               <h2 className="text-2xl text-[color:var(--ink-900)]">
                 {selectedConversation
-                  ? `Conversa com ${
+                  ? `${t.patientConversationWith} ${
                       selectedConversation.psychologist.psychologistProfile
                         ?.displayName ??
                       selectedConversation.psychologist.email ??
-                      "sua psicologa"
+                      t.patientDefaultPsychologist
                     }`
-                  : "Selecione uma conversa"}
+                  : t.patientNoConversation}
               </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-500)]">
@@ -334,7 +352,7 @@ export default function PatientClient({ tenantId }: Props) {
                 Menu
               </button>
               <span>
-                {selectedConversation?.aiEnabled ? "IA habilitada" : "IA desativada"}
+                {selectedConversation?.aiEnabled ? t.patientAiOn : t.patientAiOff}
               </span>
             </div>
           </div>
@@ -364,7 +382,9 @@ export default function PatientClient({ tenantId }: Props) {
                   }`}
                 >
                     <p className="text-xs uppercase tracking-[0.2em] opacity-70">
-                      {message.authorType === "PATIENT" ? "Voce" : message.authorType}
+                      {message.authorType === "PATIENT"
+                        ? t.patientYou
+                        : message.authorType}
                     </p>
                     <p className="mt-2">{message.content}</p>
                   </div>
@@ -377,7 +397,7 @@ export default function PatientClient({ tenantId }: Props) {
                 onClick={scrollToBottom}
                 className="absolute bottom-3 right-2 rounded-full border border-black/10 bg-white/90 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)] shadow-[0_8px_18px_var(--shadow-color)]"
               >
-                Ir para o fim
+                {t.patientScrollBottom}
               </button>
             ) : null}
           </div>
@@ -386,7 +406,7 @@ export default function PatientClient({ tenantId }: Props) {
             <textarea
               ref={messageInputRef}
               className="min-h-[96px] max-h-[240px] flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
-              placeholder="Digite sua mensagem..."
+              placeholder={t.patientSendPlaceholder}
               value={messageDraft}
               onChange={(event) => {
                 setMessageDraft(event.target.value);
@@ -400,14 +420,14 @@ export default function PatientClient({ tenantId }: Props) {
               onClick={handleSendMessage}
               disabled={loading || !selectedId}
             >
-              Enviar
+              {t.patientSend}
             </button>
           </div>
         </div>
 
         {status ? (
           <div className="rounded-2xl border border-black/10 bg-[color:var(--surface-100)] px-4 py-3 text-xs text-[color:var(--ink-500)]">
-            {loading ? "Carregando..." : status}
+            {loading ? t.loading : status}
           </div>
         ) : null}
       </section>

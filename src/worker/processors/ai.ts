@@ -21,6 +21,11 @@ type AiJob = {
 const DEFAULT_MAX_TURNS = 3;
 const DEFAULT_MAX_TOKENS = 300;
 const DEFAULT_TEMPERATURE = 0.4;
+const LANGUAGE_DIRECTIVE = {
+  PT: "Responda sempre em portugues.",
+  ES: "Responda sempre em espanhol.",
+  EN: "Respond in English.",
+} as const;
 
 function buildSafetyReply() {
   return (
@@ -48,6 +53,7 @@ function buildUnavailableReply() {
 export async function processAi(job: AiJob) {
   const conversation = await prisma.conversation.findFirst({
     where: { tenantId: job.tenantId, id: job.conversationId },
+    include: { patient: { include: { patientProfile: true } } },
   });
   if (!conversation || !conversation.aiEnabled) {
     return;
@@ -121,7 +127,12 @@ export async function processAi(job: AiJob) {
     conversationPolicy: conversationPolicy?.policyText,
   });
 
+  const patientLanguage =
+    (conversation.patient?.patientProfile as {
+      preferredLanguage?: keyof typeof LANGUAGE_DIRECTIVE;
+    })?.preferredLanguage ?? "ES";
   const extraDirectives = [
+    LANGUAGE_DIRECTIVE[patientLanguage],
     signals.anger ? signalConfig.anger.directive : "",
     signals.disconnect ? signalConfig.disconnect.directive : "",
     signals.rumination ? signalConfig.rumination.directive : "",

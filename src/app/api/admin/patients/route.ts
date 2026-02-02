@@ -11,6 +11,7 @@ const createSchema = z.object({
   displayName: z.string().min(1),
   phoneE164: z.string().min(6),
   psychologistUserId: z.string().optional(),
+  preferredLanguage: z.enum(["PT", "ES", "EN"]).optional(),
 });
 
 export async function GET() {
@@ -35,6 +36,9 @@ export async function GET() {
       isActive: user.isActive,
       displayName: user.patientProfile?.displayName ?? null,
       phoneE164: user.patientProfile?.phoneE164 ?? null,
+      preferredLanguage:
+        (user.patientProfile as { preferredLanguage?: "PT" | "ES" | "EN" })
+          ?.preferredLanguage ?? "ES",
       createdAt: user.createdAt.toISOString(),
     })),
   });
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const patient = await prisma.user.create({
+  const patient = (await prisma.user.create({
     data: {
       tenantId: session.user.tenantId,
       role: "PATIENT",
@@ -87,11 +91,22 @@ export async function POST(request: Request) {
         create: {
           displayName: body.displayName,
           phoneE164: body.phoneE164,
+          preferredLanguage: body.preferredLanguage ?? "ES",
         },
       },
     },
     include: { patientProfile: true },
-  });
+  })) as unknown as {
+    id: string;
+    email: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    patientProfile?: {
+      displayName?: string | null;
+      phoneE164?: string | null;
+      preferredLanguage?: "PT" | "ES" | "EN";
+    } | null;
+  };
 
   if (body.psychologistUserId) {
     const dek = generateDek();
@@ -102,6 +117,7 @@ export async function POST(request: Request) {
         psychologistUserId: body.psychologistUserId,
         patientUserId: patient.id,
         aiEnabled: true,
+        language: (body.preferredLanguage ?? "ES") as "PT" | "ES" | "EN",
         encryptedDek,
       },
     });
@@ -122,6 +138,7 @@ export async function POST(request: Request) {
       isActive: patient.isActive,
       displayName: patient.patientProfile?.displayName ?? null,
       phoneE164: patient.patientProfile?.phoneE164 ?? null,
+      preferredLanguage: patient.patientProfile?.preferredLanguage ?? "ES",
       createdAt: patient.createdAt.toISOString(),
     },
   });

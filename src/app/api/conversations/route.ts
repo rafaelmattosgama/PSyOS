@@ -90,7 +90,8 @@ export async function POST(request: Request) {
 
 const toggleSchema = z.object({
   conversationId: z.string().min(1),
-  aiEnabled: z.boolean(),
+  aiEnabled: z.boolean().optional(),
+  language: z.enum(["PT", "ES", "EN"]).optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -98,6 +99,12 @@ export async function PATCH(request: Request) {
   requireRole(user.role, ["PSYCHOLOGIST"]);
 
   const body = toggleSchema.parse(await request.json());
+  if (typeof body.aiEnabled !== "boolean" && !body.language) {
+    return NextResponse.json(
+      { error: "Nothing to update" },
+      { status: 400 },
+    );
+  }
 
   const conversation = await prisma.conversation.findFirst({
     where: {
@@ -113,16 +120,21 @@ export async function PATCH(request: Request) {
 
   const updated = await prisma.conversation.update({
     where: { id: conversation.id, tenantId: user.tenantId },
-    data: { aiEnabled: body.aiEnabled },
+    data: {
+      ...(typeof body.aiEnabled === "boolean" ? { aiEnabled: body.aiEnabled } : {}),
+      ...(body.language ? { language: body.language } : {}),
+    },
   });
 
+  const updatedLanguage =
+    (updated as { language?: "PT" | "ES" | "EN" }).language ?? body.language ?? "ES";
   await logAuditEvent({
     tenantId: user.tenantId,
     actorUserId: user.id,
     action: "conversation.ai.toggle",
     targetType: "Conversation",
     targetId: updated.id,
-    meta: { aiEnabled: updated.aiEnabled },
+    meta: { aiEnabled: updated.aiEnabled, language: updatedLanguage },
   });
 
   return NextResponse.json({ item: updated });

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n";
 
 type StatusState = {
   tone: "idle" | "loading" | "success" | "error";
@@ -28,6 +29,7 @@ async function postJson<T>(url: string, payload: Record<string, unknown>) {
 }
 
 export default function LoginPage() {
+  const { language, setLanguage, t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -54,23 +56,23 @@ export default function LoginPage() {
 
   const handleCheckEmail = async () => {
     if (!canUseEmail) {
-      setError("Informe o email.");
+      setError(t.statusEmailRequired);
       return;
     }
     try {
-      setLoading("Verificando email...");
+      setLoading(t.statusCheckEmail);
       const data = await postJson<{ status: Stage }>("/api/auth/email/check", {
         email,
       });
       if (data.status === "login") {
         setStage("login");
-        setSuccess("Email encontrado. Informe a senha.");
+        setSuccess(t.statusEmailFound);
       } else if (data.status === "setup") {
         setStage("setup");
-        setSuccess("Primeiro acesso. Defina uma senha.");
+        setSuccess(t.statusFirstAccess);
       } else {
         setStage("not_found");
-        setError("Email nao encontrado.");
+        setError(t.statusEmailNotFound);
       }
     } catch (error) {
       setError((error as Error).message);
@@ -79,11 +81,11 @@ export default function LoginPage() {
 
   const handlePasswordLogin = async () => {
     if (!canUseEmail || !canUsePassword) {
-      setError("Informe email e senha.");
+      setError(t.statusLoginRequired);
       return;
     }
     try {
-      setLoading("Autenticando com senha...");
+      setLoading(t.statusAuth);
       const data = await postJson<{ redirectTo?: string }>(
         "/api/auth/password/login",
         {
@@ -91,7 +93,7 @@ export default function LoginPage() {
           password,
         },
       );
-      setSuccess("Login com senha ok.");
+      setSuccess(t.statusLoginOk);
       if (data.redirectTo) {
         router.push(data.redirectTo);
       }
@@ -102,15 +104,15 @@ export default function LoginPage() {
 
   const handlePasswordSetup = async () => {
     if (!canUseEmail || !canUsePassword || !confirmPassword.trim()) {
-      setError("Informe email e as duas senhas.");
+      setError(t.statusSetupRequired);
       return;
     }
     if (password !== confirmPassword) {
-      setError("As senhas nao conferem.");
+      setError(t.statusMismatch);
       return;
     }
     try {
-      setLoading("Salvando senha...");
+      setLoading(t.statusSavingPassword);
       const data = await postJson<{ redirectTo?: string }>(
         "/api/auth/password/setup",
         {
@@ -119,7 +121,7 @@ export default function LoginPage() {
           confirmPassword,
         },
       );
-      setSuccess("Senha criada. Entrando...");
+      setSuccess(t.statusPasswordCreated);
       if (data.redirectTo) {
         router.push(data.redirectTo);
       }
@@ -133,12 +135,27 @@ export default function LoginPage() {
       <div className="mx-auto w-full max-w-5xl">
         <header className="rounded-[28px] border border-black/10 bg-white/80 p-8 shadow-[0_18px_40px_var(--shadow-color)]">
           <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-            Acesso seguro
+            {t.secureAccess}
           </p>
-          <h1 className="mt-3 text-4xl text-[color:var(--ink-900)]">Entrar</h1>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-4xl text-[color:var(--ink-900)]">{t.loginTitle}</h1>
+            <select
+              className="h-9 rounded-full border border-black/10 bg-white/80 px-3 text-xs font-semibold text-[color:var(--ink-900)]"
+              value={language}
+              onChange={(event) =>
+                setLanguage(event.target.value as typeof language)
+              }
+              aria-label="Idioma"
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <p className="mt-3 max-w-2xl text-sm text-[color:var(--ink-700)]">
-            Informe o email. Se ja existir, pedimos a senha. Se for o primeiro
-            acesso, pedimos para criar a senha.
+            {t.loginSubtitle}
           </p>
         </header>
 
@@ -146,11 +163,11 @@ export default function LoginPage() {
           <div className="rounded-[28px] border border-black/10 bg-white/70 p-8 shadow-[0_18px_40px_var(--shadow-color)]">
             <div className="grid gap-3">
               <label className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-500)]">
-                Email
+                {t.labelEmail}
               </label>
               <input
                 className="h-12 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
-                placeholder="admin@psyos.local"
+                placeholder={t.placeholderEmail}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 onFocus={() => setStatus(initialStatus)}
@@ -159,11 +176,11 @@ export default function LoginPage() {
               {stage === "login" || stage === "setup" ? (
                 <>
                   <label className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-500)]">
-                    Senha
+                    {t.labelPassword}
                   </label>
                   <input
                     className="h-12 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
-                    placeholder="Sua senha"
+                    placeholder={t.placeholderPassword}
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
@@ -174,17 +191,17 @@ export default function LoginPage() {
               {stage === "setup" ? (
                 <>
                   <label className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-500)]">
-                    Confirmar senha
+                    {t.labelConfirm}
                   </label>
                   <input
                     className="h-12 rounded-xl border border-black/10 bg-white/90 px-4 text-sm"
-                    placeholder="Repita a senha"
+                    placeholder={t.placeholderConfirm}
                     type="password"
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                   />
                   <p className="text-xs text-[color:var(--ink-500)]">
-                    Minimo 12 caracteres, maiuscula, minuscula, numero e simbolo.
+                    {t.rulePassword}
                   </p>
                 </>
               ) : null}
@@ -197,7 +214,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handleCheckEmail}
                 >
-                  Continuar
+                  {t.continue}
                 </button>
               ) : null}
 
@@ -207,7 +224,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handlePasswordLogin}
                 >
-                  Entrar
+                  {t.login}
                 </button>
               ) : null}
 
@@ -217,7 +234,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handlePasswordSetup}
                 >
-                  Criar senha
+                  {t.createPassword}
                 </button>
               ) : null}
 
@@ -227,7 +244,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={resetFlow}
                 >
-                  Usar outro email
+                  {t.useAnotherEmail}
                 </button>
               ) : null}
             </div>
@@ -250,18 +267,18 @@ export default function LoginPage() {
           <div className="flex flex-col gap-6">
             <div className="rounded-[28px] border border-black/10 bg-white/80 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
               <h2 className="text-2xl text-[color:var(--ink-900)]">
-                Contas demo
+                {t.demoAccounts}
               </h2>
               <div className="mt-4 space-y-3 text-sm text-[color:var(--ink-600)]">
                 <p>Admin: admin@psyos.local</p>
                 <p>Psicologo: psicologo@psyos.local</p>
                 <p>Paciente: paciente@psyos.local</p>
                 <p>System: root@psyos.local</p>
-                <p>Senha demo: 123456</p>
+                <p>{t.demoPassword}</p>
               </div>
             </div>
             <div className="rounded-[28px] border border-black/10 bg-[color:var(--surface-100)] p-6 text-xs text-[color:var(--ink-500)]">
-              O tenant e identificado automaticamente pelo email.
+              {t.tenantHint}
             </div>
           </div>
         </div>
