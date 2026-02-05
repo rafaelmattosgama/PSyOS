@@ -53,6 +53,7 @@ model Tenant {
   webauthnCreds   WebAuthnCredential[]
   sessions        Session[]
   accessGrants    ConversationAccessGrant[]
+  weeklySummaries WeeklySummary[]
 }
 
 model User {
@@ -131,6 +132,7 @@ model Conversation {
   aiEpisodes   AiEpisode[]
   records      Record[]
   accessGrants ConversationAccessGrant[]
+  weeklySummaries WeeklySummary[]
 
   @@index([tenantId])
   @@index([psychologistUserId])
@@ -208,6 +210,24 @@ model Record {
   conversation Conversation @relation(fields: [conversationId], references: [id])
   createdBy    User         @relation("RecordCreator", fields: [createdByUserId], references: [id])
 
+  @@index([tenantId])
+  @@index([conversationId])
+}
+
+model WeeklySummary {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  weekStart      DateTime
+  weekEnd        DateTime
+  summaryJson    Json
+  generatedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([conversationId, weekStart])
   @@index([tenantId])
   @@index([conversationId])
 }

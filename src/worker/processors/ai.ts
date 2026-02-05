@@ -27,27 +27,84 @@ const LANGUAGE_DIRECTIVE = {
   EN: "Respond in English.",
 } as const;
 
-function buildSafetyReply() {
-  return (
-    "Sinto muito que voce esteja passando por isso. Isso nao substitui sua sessao. " +
-    "Se houver risco imediato, procure sua terapeuta ou servicos de emergencia. " +
-    "Quer registrar o que aconteceu agora para levar a sessao?"
-  );
+const SIGNAL_DIRECTIVES = {
+  PT: {
+    anger: "Use o modulo RAIN para ira/discussao.",
+    disconnect: "Use ancoragem suave para desconexao.",
+    rumination: "Se houver ruminacao, redirecione para observacao e acao sem interpretacao.",
+    highRisk: "Risco alto: responder com orientacao de contato imediato.",
+  },
+  ES: {
+    anger: "Usa el modulo RAIN para ira/discusion.",
+    disconnect: "Usa anclaje suave para desconexion.",
+    rumination:
+      "Si hay rumiacion, redirige a observacion y accion sin interpretacion.",
+    highRisk: "Riesgo alto: responder con orientacion de contacto inmediato.",
+  },
+  EN: {
+    anger: "Use the RAIN module for anger/discussion.",
+    disconnect: "Use gentle anchoring for disconnection.",
+    rumination:
+      "If rumination appears, redirect to observation and action without interpretation.",
+    highRisk: "High risk: respond with immediate contact guidance.",
+  },
+} as const;
+
+const WORKER_COPY = {
+  PT: {
+    safety:
+      "Sinto muito que voce esteja passando por isso. Isso nao substitui sua sessao. " +
+      "Se houver risco imediato, procure sua terapeuta ou servicos de emergencia. " +
+      "Quer registrar o que aconteceu agora para levar a sessao?",
+    closing:
+      "Podemos fechar por agora para nao prolongar o episodio. " +
+      "Se quiser, anote o que ficou mais vivo e leve para a sessao. " +
+      "Este acompanhamento e supervisionado; fale com sua psicologa se precisar.",
+    unavailable:
+      "Estou com instabilidade agora e nao consigo responder com clareza. " +
+      "Se quiser, podemos registrar o que aconteceu para levar a sessao.",
+    noLeak: "Nunca exponha dados de outros pacientes ou tenants.",
+  },
+  ES: {
+    safety:
+      "Siento mucho que estes pasando por esto. Esto no sustituye tu sesion. " +
+      "Si hay riesgo inmediato, busca a tu terapeuta o servicios de emergencia. " +
+      "Quieres registrar lo ocurrido para llevarlo a la sesion?",
+    closing:
+      "Podemos cerrar por ahora para no prolongar el episodio. " +
+      "Si quieres, anota lo mas vivo y llevalo a la sesion. " +
+      "Este acompanamiento es supervisado; habla con tu psicologa si lo necesitas.",
+    unavailable:
+      "Estoy con inestabilidad ahora y no logro responder con claridad. " +
+      "Si quieres, podemos registrar lo ocurrido para llevarlo a la sesion.",
+    noLeak: "Nunca expongas datos de otros pacientes o tenants.",
+  },
+  EN: {
+    safety:
+      "I'm sorry you're going through this. This does not replace your session. " +
+      "If there's immediate risk, contact your therapist or emergency services. " +
+      "Would you like to record what happened to bring to your session?",
+    closing:
+      "We can close for now to avoid prolonging the episode. " +
+      "If you'd like, note what felt most alive and bring it to your session. " +
+      "This accompaniment is supervised; contact your psychologist if needed.",
+    unavailable:
+      "I'm having instability right now and can't respond clearly. " +
+      "If you'd like, we can record what happened to bring to your session.",
+    noLeak: "Never expose data from other patients or tenants.",
+  },
+} as const;
+
+function buildSafetyReply(language: keyof typeof WORKER_COPY) {
+  return WORKER_COPY[language].safety;
 }
 
-function buildClosingReply() {
-  return (
-    "Podemos fechar por agora para nao prolongar o episodio. " +
-    "Se quiser, anote o que ficou mais vivo e leve para a sessao. " +
-    "Este acompanhamento e supervisionado; fale com sua psicologa se precisar."
-  );
+function buildClosingReply(language: keyof typeof WORKER_COPY) {
+  return WORKER_COPY[language].closing;
 }
 
-function buildUnavailableReply() {
-  return (
-    "Estou com instabilidade agora e nao consigo responder com clareza. " +
-    "Se quiser, podemos registrar o que aconteceu para levar a sessao."
-  );
+function buildUnavailableReply(language: keyof typeof WORKER_COPY) {
+  return WORKER_COPY[language].unavailable;
 }
 
 export async function processAi(job: AiJob) {
@@ -131,13 +188,16 @@ export async function processAi(job: AiJob) {
     (conversation.patient?.patientProfile as {
       preferredLanguage?: keyof typeof LANGUAGE_DIRECTIVE;
     })?.preferredLanguage ?? "ES";
+  const workerLanguage =
+    (patientLanguage as keyof typeof WORKER_COPY) ?? "ES";
+  const signalDirectives = SIGNAL_DIRECTIVES[workerLanguage];
   const extraDirectives = [
     LANGUAGE_DIRECTIVE[patientLanguage],
-    signals.anger ? signalConfig.anger.directive : "",
-    signals.disconnect ? signalConfig.disconnect.directive : "",
-    signals.rumination ? signalConfig.rumination.directive : "",
-    signals.highRisk ? signalConfig.highRisk.directive : "",
-    "Nunca exponha dados de outros pacientes ou tenants.",
+    signals.anger ? signalDirectives.anger : "",
+    signals.disconnect ? signalDirectives.disconnect : "",
+    signals.rumination ? signalDirectives.rumination : "",
+    signals.highRisk ? signalDirectives.highRisk : "",
+    WORKER_COPY[workerLanguage].noLeak,
   ]
     .filter(Boolean)
     .join(" ");
@@ -168,10 +228,10 @@ export async function processAi(job: AiJob) {
   }
 
   if (signals.highRisk) {
-    reply = buildSafetyReply();
+    reply = buildSafetyReply(workerLanguage);
     closeEpisode = true;
   } else if (remainingTurns <= 0) {
-    reply = buildClosingReply();
+    reply = buildClosingReply(workerLanguage);
     closeEpisode = true;
   } else {
     try {
@@ -183,15 +243,15 @@ export async function processAi(job: AiJob) {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("[ai] OpenAI error:", (error as Error).message);
-      reply = buildUnavailableReply();
+      reply = buildUnavailableReply(workerLanguage);
       closeEpisode = true;
     }
 
     if (!reply) {
-      reply = buildClosingReply();
+      reply = buildClosingReply(workerLanguage);
       closeEpisode = true;
     } else if (remainingTurns === 1) {
-      reply = `${reply} ${buildClosingReply()}`.trim();
+      reply = `${reply} ${buildClosingReply(workerLanguage)}`.trim();
       closeEpisode = true;
     }
   }

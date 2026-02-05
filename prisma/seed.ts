@@ -1,7 +1,7 @@
 import { prisma } from "../src/lib/prisma";
 import { hashPassword } from "../src/lib/auth/password";
 import { DEFAULT_AIDO_POLICY } from "../src/lib/ai/policy";
-import { encryptDek, generateDek, getMasterKek } from "../src/lib/crypto";
+import { decryptDek, encryptDek, encryptMessage, generateDek, getMasterKek } from "../src/lib/crypto";
 
 const DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD ?? "123456";
 const TENANT_NAME = process.env.SEED_TENANT_NAME ?? "Clinica Aurora";
@@ -109,6 +109,115 @@ async function ensureConversation(params: {
   });
 }
 
+async function seedConversationMessages(params: {
+  tenantId: string;
+  conversationId: string;
+  dek: Buffer;
+}) {
+  const existing = await prisma.message.findFirst({
+    where: { tenantId: params.tenantId, conversationId: params.conversationId },
+    select: { id: true },
+  });
+  if (existing) {
+    return;
+  }
+
+  const now = new Date();
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 3600 * 1000);
+
+  const messages = [
+    { authorType: "PATIENT", direction: "IN", content: "Hoje acordei com o peito apertado." , createdAt: daysAgo(20)},
+    { authorType: "AI", direction: "OUT", content: "Obrigada por contar. O que aconteceu antes disso?" , createdAt: daysAgo(20)},
+    { authorType: "PSYCHOLOGIST", direction: "OUT", content: "Vamos registrar isso juntos. Como o corpo reagiu?" , createdAt: daysAgo(20)},
+    { authorType: "PATIENT", direction: "IN", content: "Senti um nó no estômago e vontade de chorar." , createdAt: daysAgo(13)},
+    { authorType: "AI", direction: "OUT", content: "Quer tentar nomear essa emoção e onde ela aparece no corpo?" , createdAt: daysAgo(13)},
+    { authorType: "PATIENT", direction: "IN", content: "Hoje discuti com minha mãe e fiquei irritada." , createdAt: daysAgo(8)},
+    { authorType: "PSYCHOLOGIST", direction: "OUT", content: "O que mais te incomodou nessa conversa?" , createdAt: daysAgo(8)},
+    { authorType: "PATIENT", direction: "IN", content: "Sinto que ela não me escuta." , createdAt: daysAgo(5)},
+    { authorType: "AI", direction: "OUT", content: "O que você gostaria que tivesse sido diferente?" , createdAt: daysAgo(5)},
+    { authorType: "PATIENT", direction: "IN", content: "Hoje foi um dia melhor, consegui descansar um pouco." , createdAt: daysAgo(2)},
+  ];
+
+  const data = messages.map((message) => {
+    const encrypted = encryptMessage(message.content, params.dek);
+    return {
+      tenantId: params.tenantId,
+      conversationId: params.conversationId,
+      direction: message.direction as "IN" | "OUT",
+      authorType: message.authorType as "PATIENT" | "PSYCHOLOGIST" | "AI",
+      ciphertext: encrypted.ciphertext,
+      iv: encrypted.iv,
+      authTag: encrypted.authTag,
+      createdAt: message.createdAt,
+    };
+  });
+
+  await prisma.message.createMany({ data });
+}
+
+async function seedConversationRecords(params: {
+  tenantId: string;
+  conversationId: string;
+  createdByUserId: string;
+}) {
+  const existing = await prisma.record.findFirst({
+    where: { tenantId: params.tenantId, conversationId: params.conversationId },
+    select: { id: true },
+  });
+  if (existing) {
+    return;
+  }
+  const now = new Date();
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 3600 * 1000);
+
+  await prisma.record.createMany({
+    data: [
+      {
+        tenantId: params.tenantId,
+        conversationId: params.conversationId,
+        createdByUserId: params.createdByUserId,
+        dataJson: {
+          event: "Discussão com a mãe",
+          thought: "Ela nunca me entende",
+          emotion: "irritada",
+          body: "peito apertado",
+          action: "saí do quarto",
+          result: "alívio curto",
+        },
+        createdAt: daysAgo(8),
+      },
+      {
+        tenantId: params.tenantId,
+        conversationId: params.conversationId,
+        createdByUserId: params.createdByUserId,
+        dataJson: {
+          event: "Dia com pouca energia",
+          thought: "Não vou dar conta",
+          emotion: "cansada",
+          body: "peso nos ombros",
+          action: "descansar",
+          result: "melhora leve",
+        },
+        createdAt: daysAgo(13),
+      },
+      {
+        tenantId: params.tenantId,
+        conversationId: params.conversationId,
+        createdByUserId: params.createdByUserId,
+        dataJson: {
+          event: "Dia melhor",
+          thought: "Posso me cuidar",
+          emotion: "alívio",
+          body: "respiração mais leve",
+          action: "caminhada curta",
+          result: "mais calma",
+        },
+        createdAt: daysAgo(2),
+      },
+    ],
+  });
+}
+
 async function ensureTenantPolicy(tenantId: string) {
   const existing = await prisma.aiPolicy.findFirst({
     where: { tenantId, ownerUserId: null, conversationId: null },
@@ -175,6 +284,27 @@ async function main() {
     psychologistId: psychologist.id,
     patientId: patient.id,
   });
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      tenantId: tenant.id,
+      psychologistUserId: psychologist.id,
+      patientUserId: patient.id,
+    },
+  });
+
+  if (conversation) {
+    const dek = decryptDek(conversation.encryptedDek, getMasterKek());
+    await seedConversationMessages({
+      tenantId: tenant.id,
+      conversationId: conversation.id,
+      dek,
+    });
+    await seedConversationRecords({
+      tenantId: tenant.id,
+      conversationId: conversation.id,
+      createdByUserId: psychologist.id,
+    });
+  }
 
   await ensureTenantPolicy(tenant.id);
 
