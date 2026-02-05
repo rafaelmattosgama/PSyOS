@@ -13,6 +13,8 @@ export async function callOpenAi(params: {
     throw new Error("OPENAI_API_KEY is not configured");
   }
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const useMaxCompletionTokens =
+    model.startsWith("gpt-5") || model.startsWith("o1");
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -22,13 +24,19 @@ export async function callOpenAi(params: {
     body: JSON.stringify({
       model,
       messages: params.messages,
-      max_tokens: params.maxTokens ?? 300,
+      ...(useMaxCompletionTokens
+        ? { max_completion_tokens: params.maxTokens ?? 300 }
+        : { max_tokens: params.maxTokens ?? 300 }),
       temperature: params.temperature ?? 0.4,
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
+    // eslint-disable-next-line no-console
+    console.error(
+      `[openai] ${response.status} ${response.statusText} ${errorText || "no body"}`,
+    );
     throw new Error(
       `OpenAI request failed (${response.status}): ${errorText || "no body"}`,
     );
