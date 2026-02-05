@@ -1,7 +1,7 @@
 # PsyOS
 
 Multi-tenant plataforma clinica para psicologos conversarem com pacientes via WhatsApp
-(EvolutionAPI) e portal web, com suporte de IA stateless e politicas clinicas.
+Portal web com suporte de IA stateless e politicas clinicas.
 
 ## Stack
 - Next.js (App Router) + TypeScript strict
@@ -77,10 +77,6 @@ MASTER_KEK_B64=base64_32_bytes
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 
-EVOLUTION_API_URL=https://api.evolution.example
-EVOLUTION_API_KEY=...
-EVOLUTION_INSTANCE=clinic-instance
-
 WEBAUTHN_RP_NAME=PsyOS
 WEBAUTHN_RP_ID=localhost
 WEBAUTHN_ORIGIN=http://localhost:3000
@@ -99,7 +95,6 @@ Paginas:
 - `/system`
 
 APIs:
-- `POST /api/webhooks/evolution` (header `x-tenant-id`)
 - `GET|POST /api/conversations`
 - `POST /api/conversations/access-grant`
 - `GET /api/messages`
@@ -149,7 +144,6 @@ APIs:
 
 ## Evolucao WhatsApp
 
-- Webhook: `POST /api/webhooks/evolution`
 - Idempotencia via `externalMessageId`.
 - Jobs:
   - `inbound_message_process`

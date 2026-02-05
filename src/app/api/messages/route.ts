@@ -36,20 +36,25 @@ export async function GET(request: Request) {
       tenantId: user.tenantId,
       conversationId: conversation.id,
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
     take: query.limit ?? 50,
   });
 
   const dek = decryptDek(conversation.encryptedDek, getMasterKek());
-  const items = messages.map((message) => ({
-    id: message.id,
-    direction: message.direction,
-    authorType: message.authorType,
-    createdAt: message.createdAt,
-    content: decryptMessage(message.ciphertext, message.iv, message.authTag, dek),
-    hasAttachment: Boolean((message as { attachmentCiphertext?: string }).attachmentCiphertext),
-    attachmentMime: (message as { attachmentMime?: string | null }).attachmentMime ?? null,
-  }));
+  const items = messages
+    .slice()
+    .reverse()
+    .map((message) => ({
+      id: message.id,
+      direction: message.direction,
+      authorType: message.authorType,
+      createdAt: message.createdAt,
+      content: decryptMessage(message.ciphertext, message.iv, message.authTag, dek),
+      hasAttachment: Boolean(
+        (message as { attachmentCiphertext?: string }).attachmentCiphertext,
+      ),
+      attachmentMime: (message as { attachmentMime?: string | null }).attachmentMime ?? null,
+    }));
 
   await logAuditEvent({
     tenantId: user.tenantId,

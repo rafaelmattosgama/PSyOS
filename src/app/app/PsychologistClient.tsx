@@ -87,6 +87,78 @@ const formatAudioTime = (value: number) => {
   return `${minutes}:${seconds}`;
 };
 
+const renderInlineBold = (text: string) => {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return (
+        <strong key={`b-${index}`} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={`t-${index}`}>{part}</span>;
+  });
+};
+
+const renderLineWithHeading = (line: string) => {
+  const trimmed = line.trim();
+  const isHeading = /^\d+\)\s+/.test(trimmed);
+  if (!isHeading) {
+    return renderInlineBold(line);
+  }
+  return (
+    <span className="font-semibold text-[color:var(--ink-900)]">
+      {renderInlineBold(line)}
+    </span>
+  );
+};
+
+const renderFormattedContent = (content: string) => {
+  const lines = content.split(/\r?\n/);
+  const blocks: string[][] = [];
+  let current: string[] = [];
+  lines.forEach((line) => {
+    if (line.trim() === "") {
+      if (current.length) {
+        blocks.push(current);
+        current = [];
+      }
+    } else {
+      current.push(line);
+    }
+  });
+  if (current.length) {
+    blocks.push(current);
+  }
+
+  return blocks.map((block, index) => {
+    const isList = block.every((line) => /^(\s*[-*]|\s*\d+\.)\s+/.test(line));
+    if (isList) {
+      return (
+        <ul key={`list-${index}`} className="ml-4 list-disc space-y-1">
+          {block.map((line, itemIndex) => (
+            <li key={`li-${itemIndex}`}>
+              {renderInlineBold(line.replace(/^(\s*[-*]|\s*\d+\.)\s+/, ""))}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    const paragraphLines = block.join("\n").split("\n");
+    return (
+      <p key={`p-${index}`} className="whitespace-pre-wrap">
+        {paragraphLines.map((line, lineIndex) => (
+          <span key={`line-${lineIndex}`}>
+            {renderLineWithHeading(line)}
+            {lineIndex < paragraphLines.length - 1 ? <br /> : null}
+          </span>
+        ))}
+      </p>
+    );
+  });
+};
+
 function AudioMessage({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -422,6 +494,8 @@ const PSYCH_COPY: Record<
     edit: string;
     policySave: string;
     policyReview: string;
+    autoSaved: string;
+    autoSaveError: string;
     policyAppliesAll: string;
     tabPolicy: string;
     tabContext: string;
@@ -434,6 +508,7 @@ const PSYCH_COPY: Record<
     aiTuningTitle: string;
     maxTokensLabel: string;
     maxTurnsLabel: string;
+    disableEpisodeLabel: string;
     temperatureLabel: string;
     resetDefaultLabel: string;
     resetButton: string;
@@ -460,6 +535,8 @@ const PSYCH_COPY: Record<
     directiveDisconnect: string;
     directiveRumination: string;
     directiveHighRisk: string;
+    chatToday: string;
+    chatYesterday: string;
     objective: string;
     objectivePlaceholder: string;
     saveConversationPolicy: string;
@@ -519,6 +596,8 @@ const PSYCH_COPY: Record<
     edit: "Editar",
     policySave: "Guardar politica del psicologo",
     policyReview: "Revisar antes de guardar.",
+    autoSaved: "Guardado automaticamente",
+    autoSaveError: "Error al guardar",
     policyAppliesAll: "Esta politica se aplica a todas las conversaciones.",
     tabPolicy: "Politica",
     tabContext: "Contexto",
@@ -531,6 +610,7 @@ const PSYCH_COPY: Record<
     aiTuningTitle: "Ajustes de IA (por psicologo)",
     maxTokensLabel: "Max tokens",
     maxTurnsLabel: "Max turns por episodio",
+    disableEpisodeLabel: "Desactivar limite de episodio",
     temperatureLabel: "Temperatura",
     resetDefaultLabel: "Restaurar por defecto",
     resetButton: "Resetear",
@@ -557,6 +637,8 @@ const PSYCH_COPY: Record<
     directiveDisconnect: "Anclar en el cuerpo y nombrar sensaciones.",
     directiveRumination: "Redirigir rumiacion a observacion y accion.",
     directiveHighRisk: "Respuesta de seguridad con orientacion de contacto.",
+    chatToday: "Hoy",
+    chatYesterday: "Ayer",
     objective: "Objetivo del momento",
     objectivePlaceholder: "Ej: reducir ruminacion esta semana con pequenas acciones",
     saveConversationPolicy: "Guardar politica de la conversacion",
@@ -616,6 +698,8 @@ const PSYCH_COPY: Record<
     edit: "Editar",
     policySave: "Salvar policy do psicologo",
     policyReview: "Revisar antes de salvar.",
+    autoSaved: "Salvo automaticamente",
+    autoSaveError: "Erro ao salvar",
     policyAppliesAll: "Esta politica se aplica a todas as conversas.",
     tabPolicy: "Policy",
     tabContext: "Contexto",
@@ -628,6 +712,7 @@ const PSYCH_COPY: Record<
     aiTuningTitle: "Ajustes da IA (por psicologo)",
     maxTokensLabel: "Max tokens",
     maxTurnsLabel: "Max turns por episodio",
+    disableEpisodeLabel: "Desativar limite de episodio",
     temperatureLabel: "Temperatura",
     resetDefaultLabel: "Restaurar padrao",
     resetButton: "Resetar",
@@ -654,6 +739,8 @@ const PSYCH_COPY: Record<
     directiveDisconnect: "Ancorar no corpo e nomear sensacoes.",
     directiveRumination: "Redirecionar ruminacao para observacao e acao.",
     directiveHighRisk: "Resposta de seguranca com orientacao de contato.",
+    chatToday: "Hoje",
+    chatYesterday: "Ontem",
     objective: "Objetivo do momento",
     objectivePlaceholder: "Ex: reduzir ruminacao esta semana com pequenas acoes",
     saveConversationPolicy: "Salvar policy da conversa",
@@ -713,6 +800,8 @@ const PSYCH_COPY: Record<
     edit: "Edit",
     policySave: "Save psychologist policy",
     policyReview: "Review before saving.",
+    autoSaved: "Auto-saved",
+    autoSaveError: "Save error",
     policyAppliesAll: "This policy applies to all conversations.",
     tabPolicy: "Policy",
     tabContext: "Context",
@@ -725,6 +814,7 @@ const PSYCH_COPY: Record<
     aiTuningTitle: "AI settings (per psychologist)",
     maxTokensLabel: "Max tokens",
     maxTurnsLabel: "Max turns per episode",
+    disableEpisodeLabel: "Disable episode limit",
     temperatureLabel: "Temperature",
     resetDefaultLabel: "Restore default",
     resetButton: "Reset",
@@ -751,6 +841,8 @@ const PSYCH_COPY: Record<
     directiveDisconnect: "Anchor to the body and name sensations.",
     directiveRumination: "Redirect rumination to observation and action.",
     directiveHighRisk: "Safety response with contact guidance.",
+    chatToday: "Today",
+    chatYesterday: "Yesterday",
     objective: "Current goal",
     objectivePlaceholder: "E.g. reduce rumination this week with small actions",
     saveConversationPolicy: "Save conversation policy",
@@ -882,6 +974,9 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
   const [showPrompt, setShowPrompt] = useState(false);
   const [promptSnapshot, setPromptSnapshot] = useState<PromptResponse["item"]>(null);
   const [promptLoading, setPromptLoading] = useState(false);
+  const [autoSaveState, setAutoSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [showPsychPolicy, setShowPsychPolicy] = useState(false);
   const [psychPolicyTab, setPsychPolicyTab] = useState<
     "policy" | "context" | "signals"
@@ -892,6 +987,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
   const [aiMaxTokens, setAiMaxTokens] = useState(300);
   const [aiMaxTurns, setAiMaxTurns] = useState(3);
   const [aiTemperature, setAiTemperature] = useState(0.4);
+  const [disableEpisodeLimit, setDisableEpisodeLimit] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAi, setFilterAi] = useState<"all" | "enabled" | "disabled">("all");
   const [sortBy, setSortBy] = useState<"recent" | "name">("recent");
@@ -902,6 +998,11 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [weeklySummaries, setWeeklySummaries] = useState<WeeklySummary[]>([]);
   const [weeksCount, setWeeksCount] = useState(8);
+  const [typingId, setTypingId] = useState<string | null>(null);
+  const [typingText, setTypingText] = useState("");
+  const [typingIndex, setTypingIndex] = useState(0);
+  const typingDoneRef = useRef<Set<string>>(new Set());
+  const typingInitializedRef = useRef(false);
 
   const [recordEvent, setRecordEvent] = useState("");
   const [recordThought, setRecordThought] = useState("");
@@ -922,6 +1023,93 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
   const summaryCopy = SUMMARY_COPY[summaryLanguage];
   const summarySignalLabels = SIGNAL_LABELS_BY_LANG[summaryLanguage];
   const uiSignalLabels = SIGNAL_LABELS_BY_LANG[uiLanguage];
+  const locale = uiLanguage === "PT" ? "pt-BR" : uiLanguage === "ES" ? "es-ES" : "en-US";
+  const formatTime = (value: string) =>
+    new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  const formatDayLabel = (value: string) => {
+    const date = new Date(value);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays =
+      (startOfToday.getTime() - startOfDate.getTime()) / (24 * 60 * 60 * 1000);
+    if (diffDays === 0) {
+      return psychCopy.chatToday;
+    }
+    if (diffDays === 1) {
+      return psychCopy.chatYesterday;
+    }
+    return new Intl.DateTimeFormat(locale, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  };
+  const showAiWaiting = useMemo(() => {
+    if (!selectedConversation?.aiEnabled) {
+      return false;
+    }
+    if (!messages.length) {
+      return false;
+    }
+    const lastPatient = [...messages]
+      .reverse()
+      .find((message) => message.authorType === "PATIENT");
+    if (!lastPatient) {
+      return false;
+    }
+    const lastAi = [...messages].reverse().find((message) => message.authorType === "AI");
+    if (!lastAi) {
+      return true;
+    }
+    return new Date(lastAi.createdAt).getTime() < new Date(lastPatient.createdAt).getTime();
+  }, [messages, selectedConversation?.aiEnabled]);
+
+  useEffect(() => {
+    typingDoneRef.current = new Set();
+    typingInitializedRef.current = false;
+    setTypingId(null);
+    setTypingText("");
+    setTypingIndex(0);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!typingInitializedRef.current) {
+      messages
+        .filter((message) => message.authorType === "AI")
+        .forEach((message) => typingDoneRef.current.add(message.id));
+      typingInitializedRef.current = true;
+      return;
+    }
+    const lastAi = [...messages].reverse().find((message) => message.authorType === "AI");
+    if (!lastAi) {
+      return;
+    }
+    if (typingDoneRef.current.has(lastAi.id) || typingId === lastAi.id) {
+      return;
+    }
+    setTypingId(lastAi.id);
+    setTypingText(lastAi.content);
+    setTypingIndex(0);
+  }, [messages, typingId]);
+
+  useEffect(() => {
+    if (!typingId) {
+      return;
+    }
+    if (typingIndex >= typingText.length) {
+      typingDoneRef.current.add(typingId);
+      setTypingId(null);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setTypingIndex((current) => Math.min(current + 2, typingText.length));
+    }, 18);
+    return () => window.clearTimeout(timeout);
+  }, [typingId, typingIndex, typingText.length]);
 
   const filteredConversations = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -1067,9 +1255,16 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
       return;
     }
     try {
-      const data = await getJson<{ items: RecordItem[] }>(
-        `/api/records?conversationId=${conversationId}`,
-      );
+      const response = await fetch(`/api/records?conversationId=${conversationId}`, {
+        method: "GET",
+      });
+      if (!response.ok) {
+        setRecords([]);
+        return;
+      }
+      const data = (await response.json().catch(() => ({}))) as {
+        items?: RecordItem[];
+      };
       setRecords(data.items ?? []);
     } catch (error) {
       console.error(error);
@@ -1134,11 +1329,12 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
       );
       setSignalConfig(config);
       const settings = (psychFlags as { aiSettings?: unknown })?.aiSettings as
-        | { maxTokens?: number; maxTurns?: number; temperature?: number }
+        | { maxTokens?: number; maxTurns?: number; temperature?: number; disableEpisodeLimit?: boolean }
         | undefined;
       setAiMaxTokens(settings?.maxTokens ?? 300);
       setAiMaxTurns(settings?.maxTurns ?? 3);
       setAiTemperature(settings?.temperature ?? 0.4);
+      setDisableEpisodeLimit(Boolean(settings?.disableEpisodeLimit));
       const flags = convo.item?.flagsJson ?? null;
       const presetIds = Array.isArray((flags as { presetIds?: unknown })?.presetIds)
         ? ((flags as { presetIds?: unknown }).presetIds as string[])
@@ -1347,12 +1543,12 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
     if (scope === "conversation" && !selectedId) {
       return;
     }
-    if (selectedId === DEMO_CONVERSATION_ID) {
-      setStatus(psychCopy.demoSendDisabled);
+    if (scope === "user" && !psychPolicy.trim()) {
       return;
     }
     try {
       setLoading(true);
+      setAutoSaveState(scope === "user" ? "saving" : "idle");
       await sendJson("/api/policy", {
         tenantId,
         scope,
@@ -1372,17 +1568,41 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                     maxTokens: aiMaxTokens,
                     maxTurns: aiMaxTurns,
                     temperature: aiTemperature,
+                    disableEpisodeLimit,
                   },
                 }
               : undefined,
       });
+      if (scope === "user") {
+        setAutoSaveState("saved");
+        window.setTimeout(() => {
+          setAutoSaveState("idle");
+        }, 1200);
+      }
       setStatus("Policy salva.");
     } catch (error) {
       setStatus((error as Error).message);
+      if (scope === "user") {
+        setAutoSaveState("error");
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedId) {
+      return;
+    }
+    if (!psychPolicy.trim()) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      handleSavePolicy("user");
+    }, 500);
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiMaxTokens, aiMaxTurns, aiTemperature, disableEpisodeLimit, signalConfig]);
 
   const handleToggleAi = async () => {
     if (!selectedId || selectedId === DEMO_CONVERSATION_ID) {
@@ -1857,8 +2077,14 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
               </span>
               <span className="text-xs text-[color:var(--ink-500)]">
                 {psychCopy.episodeLabel}{" "}
-                {aiTurnsUsed === null ? "-" : `${aiTurnsUsed}/${aiMaxTurns}`}
-                {episodeOpen === false ? ` ${psychCopy.episodeClosed}` : ""}
+                {disableEpisodeLimit
+                  ? "∞"
+                  : aiTurnsUsed === null
+                    ? "-"
+                    : `${aiTurnsUsed}/${aiMaxTurns}`}
+                {episodeOpen === false && !disableEpisodeLimit
+                  ? ` ${psychCopy.episodeClosed}`
+                  : ""}
               </span>
               <button
                 className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)]"
@@ -2076,46 +2302,82 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
               onScroll={handleMessageScroll}
             className="h-full space-y-4 overflow-y-auto px-2 pb-2 pt-1"
             >
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.authorType === "PSYCHOLOGIST"
-                      ? "justify-end"
-                      : "justify-start"
-                  }`}
-                >
-                  <div
-                  className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-black/5 ${
-                    message.authorType === "PSYCHOLOGIST"
-                      ? "bg-[color:var(--accent-500)] text-white"
-                      : message.authorType === "AI"
-                        ? "border border-emerald-200 bg-emerald-50 text-emerald-900 ring-emerald-200/60"
-                        : "bg-[color:var(--surface-100)] text-[color:var(--ink-900)]"
-                  }`}
-                >
-                    {message.authorType !== "PATIENT" ? (
-                      <p className="text-xs uppercase tracking-[0.2em] opacity-70">
-                        {message.authorType === "AI"
-                          ? t.assistantLabel
-                          : message.authorType === "PSYCHOLOGIST"
-                            ? psychologistName
-                            : message.authorType}
-                      </p>
-                    ) : null}
-                    <p className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
-                      {message.content}
-                    </p>
-                    {message.hasAttachment ? (
-                      <div className="mt-3">
-                        <AudioMessage
-                          src={`/api/messages/attachment?messageId=${message.id}`}
-                        />
+              {messages.map((message, index) => {
+                const previous = messages[index - 1];
+                const showDayLabel =
+                  !previous ||
+                  new Date(previous.createdAt).toDateString() !==
+                    new Date(message.createdAt).toDateString();
+                return (
+                  <div key={message.id} className="space-y-3">
+                    {showDayLabel ? (
+                      <div className="flex justify-center">
+                        <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-[11px] font-semibold text-[color:var(--ink-500)] shadow-[0_8px_18px_var(--shadow-color)]">
+                          {formatDayLabel(message.createdAt)}
+                        </span>
                       </div>
                     ) : null}
+                    <div
+                      className={`flex ${
+                        message.authorType === "PSYCHOLOGIST"
+                          ? "justify-end"
+                          : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-black/5 ${
+                          message.authorType === "PSYCHOLOGIST"
+                            ? "bg-[color:var(--accent-500)] text-white"
+                            : message.authorType === "AI"
+                              ? "border border-emerald-200 bg-emerald-50 text-emerald-900 ring-emerald-200/60"
+                              : "bg-[color:var(--surface-100)] text-[color:var(--ink-900)]"
+                        }`}
+                      >
+                        {message.authorType !== "PATIENT" ? (
+                          <p className="text-xs uppercase tracking-[0.2em] opacity-70">
+                            {message.authorType === "AI"
+                              ? t.assistantLabel
+                              : message.authorType === "PSYCHOLOGIST"
+                                ? psychologistName
+                                : message.authorType}
+                          </p>
+                        ) : null}
+                        <div className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
+                          {renderFormattedContent(
+                            message.authorType === "AI" && typingId === message.id
+                              ? message.content.slice(0, typingIndex)
+                              : message.content,
+                          )}
+                        </div>
+                        {message.hasAttachment ? (
+                          <div className="mt-3">
+                            <AudioMessage
+                              src={`/api/messages/attachment?messageId=${message.id}`}
+                            />
+                          </div>
+                        ) : null}
+                        <div className="mt-2 text-[10px] text-right text-[color:var(--ink-500)]">
+                          {formatTime(message.createdAt)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {showAiWaiting ? (
+                <div className="flex justify-start">
+                  <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-emerald-200/60">
+                    <span className="text-xs uppercase tracking-[0.2em] opacity-70">
+                      {t.assistantLabel}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-emerald-600 [animation-delay:-0.2s]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-emerald-600 [animation-delay:-0.1s]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-emerald-600" />
+                    </span>
                   </div>
                 </div>
-              ))}
+              ) : null}
             </div>
             {showScrollToBottom ? (
               <button
@@ -2132,7 +2394,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
             {isRecording || pendingAudioBlob ? null : (
               <textarea
                 ref={messageInputRef}
-                className="min-h-[96px] max-h-[240px] flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
+                className="min-h-[96px] max-h-[240px] w-full flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
                 placeholder={psychCopy.sendPlaceholder}
                 value={messageDraft}
                 onChange={(event) => {
@@ -2145,7 +2407,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
               className={`flex gap-3 ${
                 pendingAudioBlob || isRecording
                   ? "w-full flex-col items-stretch"
-                  : "flex-1 items-end justify-end min-w-[88px]"
+                  : "flex-none items-end justify-end min-w-[88px]"
               }`}
             >
               {isRecording ? (
@@ -2449,8 +2711,18 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                             )
                           }
                           className="h-9 w-20 rounded-lg border border-black/10 bg-white/90 px-2 text-xs"
+                          disabled={disableEpisodeLimit}
                         />
                       </div>
+                      <label className="flex items-center justify-between gap-3 text-[11px] text-[color:var(--ink-500)]">
+                        <span>{psychCopy.disableEpisodeLabel}</span>
+                        <input
+                          type="checkbox"
+                          checked={disableEpisodeLimit}
+                          onChange={(event) => setDisableEpisodeLimit(event.target.checked)}
+                          className="h-4 w-4 accent-[color:var(--accent-500)]"
+                        />
+                      </label>
                       <div>
                         <div className="flex items-center justify-between text-[11px] text-[color:var(--ink-500)]">
                           <span>{psychCopy.temperatureLabel}</span>
@@ -2492,7 +2764,13 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                       {psychCopy.policySave}
                     </button>
                     <span className="text-xs text-[color:var(--ink-500)]">
-                      {loading ? psychCopy.saving : psychCopy.policyReview}
+                      {autoSaveState === "saving"
+                        ? psychCopy.saving
+                        : autoSaveState === "saved"
+                          ? psychCopy.autoSaved
+                          : autoSaveState === "error"
+                            ? psychCopy.autoSaveError
+                            : psychCopy.policyReview}
                     </span>
                   </div>
                 </div>

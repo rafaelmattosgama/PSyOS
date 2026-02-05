@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth/guards";
 import { decryptDek, encryptMessage, getMasterKek } from "@/lib/crypto";
 import { logAuditEvent } from "@/lib/audit";
-import { getAiQueue, getOutboundQueue } from "@/lib/queues";
+import { getAiQueue } from "@/lib/queues";
 
 const schema = z.object({
   tenantId: z.string().min(1),
@@ -52,14 +52,6 @@ export async function POST(request: Request) {
       tenantId: user.tenantId,
       conversationId: conversation.id,
       triggerMessageId: message.id,
-    });
-  }
-
-  if (user.role === "PSYCHOLOGIST") {
-    await getOutboundQueue().add("outbound_send_retry", {
-      tenantId: user.tenantId,
-      conversationId: conversation.id,
-      messageId: message.id,
     });
   }
 

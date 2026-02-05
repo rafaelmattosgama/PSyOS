@@ -57,6 +57,7 @@ export async function GET(request: Request) {
       conversationId:
         query.scope === "conversation" ? query.conversationId ?? undefined : undefined,
     },
+    orderBy: { updatedAt: "desc" },
   });
 
   return NextResponse.json({ item: policy });
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
       conversationId:
         body.scope === "conversation" ? body.conversationId ?? undefined : undefined,
     },
+    orderBy: { updatedAt: "desc" },
   });
 
   let policyId = existing?.id ?? null;

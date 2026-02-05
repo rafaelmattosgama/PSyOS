@@ -3,7 +3,6 @@ import { getRedisConnectionOptions } from "@/lib/redis";
 
 let inboundQueue: Queue | null = null;
 let aiQueue: Queue | null = null;
-let outboundQueue: Queue | null = null;
 
 export function getInboundQueue() {
   if (!inboundQueue) {
@@ -21,13 +20,4 @@ export function getAiQueue() {
     });
   }
   return aiQueue;
-}
-
-export function getOutboundQueue() {
-  if (!outboundQueue) {
-    outboundQueue = new Queue("outbound_send_retry", {
-      connection: getRedisConnectionOptions(),
-    });
-  }
-  return outboundQueue;
 }

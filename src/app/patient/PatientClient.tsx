@@ -38,6 +38,78 @@ const formatAudioTime = (value: number) => {
   return `${minutes}:${seconds}`;
 };
 
+const renderInlineBold = (text: string) => {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return (
+        <strong key={`b-${index}`} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={`t-${index}`}>{part}</span>;
+  });
+};
+
+const renderLineWithHeading = (line: string) => {
+  const trimmed = line.trim();
+  const isHeading = /^\d+\)\s+/.test(trimmed);
+  if (!isHeading) {
+    return renderInlineBold(line);
+  }
+  return (
+    <span className="font-semibold text-[color:var(--ink-900)]">
+      {renderInlineBold(line)}
+    </span>
+  );
+};
+
+const renderFormattedContent = (content: string) => {
+  const lines = content.split(/\r?\n/);
+  const blocks: string[][] = [];
+  let current: string[] = [];
+  lines.forEach((line) => {
+    if (line.trim() === "") {
+      if (current.length) {
+        blocks.push(current);
+        current = [];
+      }
+    } else {
+      current.push(line);
+    }
+  });
+  if (current.length) {
+    blocks.push(current);
+  }
+
+  return blocks.map((block, index) => {
+    const isList = block.every((line) => /^(\s*[-*]|\s*\d+\.)\s+/.test(line));
+    if (isList) {
+      return (
+        <ul key={`list-${index}`} className="ml-4 list-disc space-y-1">
+          {block.map((line, itemIndex) => (
+            <li key={`li-${itemIndex}`}>
+              {renderInlineBold(line.replace(/^(\s*[-*]|\s*\d+\.)\s+/, ""))}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    const paragraphLines = block.join("\n").split("\n");
+    return (
+      <p key={`p-${index}`} className="whitespace-pre-wrap">
+        {paragraphLines.map((line, lineIndex) => (
+          <span key={`line-${lineIndex}`}>
+            {renderLineWithHeading(line)}
+            {lineIndex < paragraphLines.length - 1 ? <br /> : null}
+          </span>
+        ))}
+      </p>
+    );
+  });
+};
+
 function AudioMessage({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -174,6 +246,11 @@ export default function PatientClient({ tenantId }: Props) {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [typingId, setTypingId] = useState<string | null>(null);
+  const [typingText, setTypingText] = useState("");
+  const [typingIndex, setTypingIndex] = useState(0);
+  const typingDoneRef = useRef<Set<string>>(new Set());
+  const typingInitializedRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
@@ -195,6 +272,93 @@ export default function PatientClient({ tenantId }: Props) {
     () => conversations.find((conv) => conv.id === selectedId) ?? null,
     [conversations, selectedId],
   );
+  const locale = language === "pt" ? "pt-BR" : language === "es" ? "es-ES" : "en-US";
+  const formatTime = (value: string) =>
+    new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  const formatDayLabel = (value: string) => {
+    const date = new Date(value);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays =
+      (startOfToday.getTime() - startOfDate.getTime()) / (24 * 60 * 60 * 1000);
+    if (diffDays === 0) {
+      return t.chatToday;
+    }
+    if (diffDays === 1) {
+      return t.chatYesterday;
+    }
+    return new Intl.DateTimeFormat(locale, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  };
+  const showAiWaiting = useMemo(() => {
+    if (!selectedConversation?.aiEnabled) {
+      return false;
+    }
+    if (!messages.length) {
+      return false;
+    }
+    const lastPatient = [...messages]
+      .reverse()
+      .find((message) => message.authorType === "PATIENT");
+    if (!lastPatient) {
+      return false;
+    }
+    const lastAi = [...messages].reverse().find((message) => message.authorType === "AI");
+    if (!lastAi) {
+      return true;
+    }
+    return new Date(lastAi.createdAt).getTime() < new Date(lastPatient.createdAt).getTime();
+  }, [messages, selectedConversation?.aiEnabled]);
+
+  useEffect(() => {
+    typingDoneRef.current = new Set();
+    typingInitializedRef.current = false;
+    setTypingId(null);
+    setTypingText("");
+    setTypingIndex(0);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!typingInitializedRef.current) {
+      messages
+        .filter((message) => message.authorType === "AI")
+        .forEach((message) => typingDoneRef.current.add(message.id));
+      typingInitializedRef.current = true;
+      return;
+    }
+    const lastAi = [...messages].reverse().find((message) => message.authorType === "AI");
+    if (!lastAi) {
+      return;
+    }
+    if (typingDoneRef.current.has(lastAi.id) || typingId === lastAi.id) {
+      return;
+    }
+    setTypingId(lastAi.id);
+    setTypingText(lastAi.content);
+    setTypingIndex(0);
+  }, [messages, typingId]);
+
+  useEffect(() => {
+    if (!typingId) {
+      return;
+    }
+    if (typingIndex >= typingText.length) {
+      typingDoneRef.current.add(typingId);
+      setTypingId(null);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setTypingIndex((current) => Math.min(current + 2, typingText.length));
+    }, 18);
+    return () => window.clearTimeout(timeout);
+  }, [typingId, typingIndex, typingText.length]);
 
   const loadConversations = async () => {
     setLoading(true);
@@ -249,16 +413,30 @@ export default function PatientClient({ tenantId }: Props) {
     if (!selectedId || !messageDraft.trim()) {
       return;
     }
+    const trimmed = messageDraft.trim();
+    const optimisticId = `temp-${Date.now()}`;
+    const previousMessages = messages;
     try {
       setLoading(true);
+      setMessages((current) => [
+        ...current,
+        {
+          id: optimisticId,
+          authorType: "PATIENT",
+          content: trimmed,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      shouldAutoScrollRef.current = true;
       await postJson("/api/messages/send", {
         tenantId,
         conversationId: selectedId,
-        content: messageDraft.trim(),
+        content: trimmed,
       });
       setMessageDraft("");
-      await loadMessages(selectedId);
+      await loadMessages(selectedId, { silent: true });
     } catch (error) {
+      setMessages(previousMessages);
       setStatus((error as Error).message);
     } finally {
       setLoading(false);
@@ -605,47 +783,83 @@ export default function PatientClient({ tenantId }: Props) {
               onScroll={handleMessageScroll}
               className="h-full space-y-4 overflow-y-auto px-2 pb-2 pt-1"
             >
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.authorType === "PATIENT"
-                      ? "justify-end"
-                      : "justify-start"
-                  }`}
-                >
-                  <div
-                  className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-black/5 ${
-                    message.authorType === "PATIENT"
-                      ? "bg-[color:var(--accent-500)] text-white"
-                      : message.authorType === "AI"
-                        ? "border border-emerald-200 bg-emerald-50 text-emerald-900 ring-emerald-200/60"
-                        : "bg-[color:var(--surface-100)] text-[color:var(--ink-900)]"
-                  }`}
-                >
-                    {message.authorType !== "PATIENT" ? (
-                      <p className="text-xs uppercase tracking-[0.2em] opacity-70">
-                        {message.authorType === "AI"
-                          ? t.assistantLabel
-                          : selectedConversation?.psychologist.psychologistProfile
-                              ?.displayName ??
-                            selectedConversation?.psychologist.email ??
-                            t.patientDefaultPsychologist}
-                      </p>
-                    ) : null}
-                    <p className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
-                      {message.content}
-                    </p>
-                    {message.hasAttachment ? (
-                      <div className="mt-3">
-                        <AudioMessage
-                          src={`/api/messages/attachment?messageId=${message.id}`}
-                        />
+              {messages.map((message, index) => {
+                const previous = messages[index - 1];
+                const showDayLabel =
+                  !previous ||
+                  new Date(previous.createdAt).toDateString() !==
+                    new Date(message.createdAt).toDateString();
+                return (
+                  <div key={message.id} className="space-y-3">
+                    {showDayLabel ? (
+                      <div className="flex justify-center">
+                        <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-[11px] font-semibold text-[color:var(--ink-500)] shadow-[0_8px_18px_var(--shadow-color)]">
+                          {formatDayLabel(message.createdAt)}
+                        </span>
                       </div>
                     ) : null}
+                    <div
+                      className={`flex ${
+                        message.authorType === "PATIENT"
+                          ? "justify-end"
+                          : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-black/5 ${
+                          message.authorType === "PATIENT"
+                            ? "bg-[color:var(--accent-500)] text-white"
+                            : message.authorType === "AI"
+                              ? "border border-emerald-200 bg-emerald-50 text-emerald-900 ring-emerald-200/60"
+                              : "bg-[color:var(--surface-100)] text-[color:var(--ink-900)]"
+                        }`}
+                      >
+                        {message.authorType !== "PATIENT" ? (
+                          <p className="text-xs uppercase tracking-[0.2em] opacity-70">
+                            {message.authorType === "AI"
+                              ? t.assistantLabel
+                              : selectedConversation?.psychologist.psychologistProfile
+                                  ?.displayName ??
+                                selectedConversation?.psychologist.email ??
+                                t.patientDefaultPsychologist}
+                          </p>
+                        ) : null}
+                        <div className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
+                          {renderFormattedContent(
+                            message.authorType === "AI" && typingId === message.id
+                              ? message.content.slice(0, typingIndex)
+                              : message.content,
+                          )}
+                        </div>
+                        {message.hasAttachment ? (
+                          <div className="mt-3">
+                            <AudioMessage
+                              src={`/api/messages/attachment?messageId=${message.id}`}
+                            />
+                          </div>
+                        ) : null}
+                        <div className="mt-2 text-[10px] text-right text-[color:var(--ink-500)]">
+                          {formatTime(message.createdAt)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {showAiWaiting ? (
+                <div className="flex justify-start">
+                  <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-emerald-200/60">
+                    <span className="text-xs uppercase tracking-[0.2em] opacity-70">
+                      {t.assistantLabel}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-emerald-600 [animation-delay:-0.2s]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-emerald-600 [animation-delay:-0.1s]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-emerald-600" />
+                    </span>
                   </div>
                 </div>
-              ))}
+              ) : null}
             </div>
             {showScrollToBottom ? (
               <button
@@ -662,7 +876,7 @@ export default function PatientClient({ tenantId }: Props) {
             {isRecording || pendingAudioBlob ? null : (
               <textarea
                 ref={messageInputRef}
-                className="min-h-[96px] max-h-[240px] flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
+                className="min-h-[96px] max-h-[240px] w-full flex-1 resize-none rounded-xl border border-black/10 bg-white/90 px-4 py-3 text-sm"
                 placeholder={t.patientSendPlaceholder}
                 value={messageDraft}
                 onChange={(event) => {
@@ -676,7 +890,7 @@ export default function PatientClient({ tenantId }: Props) {
               className={`flex gap-3 ${
                 pendingAudioBlob || isRecording
                   ? "w-full flex-col items-stretch"
-                  : "flex-1 items-end justify-end min-w-[88px]"
+                  : "flex-none items-end justify-end min-w-[88px]"
               }`}
             >
               {isRecording ? (

@@ -3,7 +3,6 @@ import { Worker, type Job } from "bullmq";
 import { getRedisConnectionOptions } from "@/lib/redis";
 import { processInbound } from "@/worker/processors/inbound";
 import { processAi } from "@/worker/processors/ai";
-import { processOutbound } from "@/worker/processors/outbound";
 
 const connection = getRedisConnectionOptions();
 
@@ -19,12 +18,6 @@ const aiWorker = new Worker(
   { connection },
 );
 
-const outboundWorker = new Worker(
-  "outbound_send_retry",
-  async (job) => processOutbound(job.data),
-  { connection },
-);
-
 const logFailure =
   (label: string) => (job: Job | undefined, error: Error, _prev?: string) => {
     // eslint-disable-next-line no-console
@@ -33,7 +26,10 @@ const logFailure =
 
 inboundWorker.on("failed", logFailure("inbound"));
 aiWorker.on("failed", logFailure("ai"));
-outboundWorker.on("failed", logFailure("outbound"));
 
 // eslint-disable-next-line no-console
-console.log("Worker running");
+console.log(
+  "Worker running",
+  `| OPENAI_MODEL=${process.env.OPENAI_MODEL ?? "unset"}`,
+  `| OPENAI_API_KEY=${process.env.OPENAI_API_KEY ? "set" : "missing"}`,
+);

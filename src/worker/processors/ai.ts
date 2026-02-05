@@ -9,7 +9,6 @@ import {
 import { callOpenAi } from "@/lib/ai/openai";
 import { storePromptSnapshot } from "@/lib/ai/debug";
 import { getOrCreateEpisode } from "@/lib/ai/episode";
-import { getOutboundQueue } from "@/lib/queues";
 import { logAuditEvent } from "@/lib/audit";
 
 type AiJob = {
@@ -108,11 +107,20 @@ function buildUnavailableReply(language: keyof typeof WORKER_COPY) {
 }
 
 export async function processAi(job: AiJob) {
+  // eslint-disable-next-line no-console
+  console.log("[ai] process start", {
+    conversationId: job.conversationId,
+    tenantId: job.tenantId,
+    triggerMessageId: job.triggerMessageId,
+    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  });
   const conversation = await prisma.conversation.findFirst({
     where: { tenantId: job.tenantId, id: job.conversationId },
     include: { patient: { include: { patientProfile: true } } },
   });
   if (!conversation || !conversation.aiEnabled) {
+    // eslint-disable-next-line no-console
+    console.log("[ai] skipped: no conversation or AI disabled");
     return;
   }
 
@@ -156,9 +164,17 @@ export async function processAi(job: AiJob) {
   const signals = detectSignals(lastPatient?.content ?? "", signalConfig);
 
   const settings = (psychologistPolicy?.flagsJson as {
-    aiSettings?: { maxTokens?: number; maxTurns?: number; temperature?: number };
+    aiSettings?: {
+      maxTokens?: number;
+      maxTurns?: number;
+      temperature?: number;
+      disableEpisodeLimit?: boolean;
+    };
   })?.aiSettings;
-  const maxTurns = Math.max(1, Math.min(settings?.maxTurns ?? DEFAULT_MAX_TURNS, 10));
+  const disableEpisodeLimit = Boolean(settings?.disableEpisodeLimit);
+  const maxTurns = disableEpisodeLimit
+    ? Number.MAX_SAFE_INTEGER
+    : Math.max(1, Math.min(settings?.maxTurns ?? DEFAULT_MAX_TURNS, 10));
   const maxTokens = Math.max(
     50,
     Math.min(settings?.maxTokens ?? DEFAULT_MAX_TOKENS, 2000),
@@ -229,28 +245,47 @@ export async function processAi(job: AiJob) {
 
   if (signals.highRisk) {
     reply = buildSafetyReply(workerLanguage);
-    closeEpisode = true;
-  } else if (remainingTurns <= 0) {
+    closeEpisode = !disableEpisodeLimit;
+  } else if (!disableEpisodeLimit && remainingTurns <= 0) {
     reply = buildClosingReply(workerLanguage);
     closeEpisode = true;
   } else {
     try {
+      // eslint-disable-next-line no-console
+      console.log("[ai] calling OpenAI", {
+        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+        maxTokens,
+        temperature,
+        messages: context.length,
+      });
       reply = await callOpenAi({
         messages: [{ role: "system", content: prompt }, ...context],
         maxTokens,
         temperature,
       });
+      // eslint-disable-next-line no-console
+      console.log("[ai] OpenAI reply length", reply?.length ?? 0);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("[ai] OpenAI error:", (error as Error).message);
+      // eslint-disable-next-line no-console
+      console.error("[ai] OpenAI error stack:", (error as Error).stack ?? "no stack");
       reply = buildUnavailableReply(workerLanguage);
-      closeEpisode = true;
+      closeEpisode = !disableEpisodeLimit;
     }
 
     if (!reply) {
-      reply = buildClosingReply(workerLanguage);
-      closeEpisode = true;
-    } else if (remainingTurns === 1) {
+      if (!disableEpisodeLimit) {
+        reply = buildClosingReply(workerLanguage);
+        closeEpisode = true;
+      }
+      // eslint-disable-next-line no-console
+      console.error("[ai] Empty reply after OpenAI call; using fallback", {
+        disableEpisodeLimit,
+        remainingTurns,
+        model: process.env.OPENAI_MODEL,
+      });
+    } else if (!disableEpisodeLimit && remainingTurns === 1) {
       reply = `${reply} ${buildClosingReply(workerLanguage)}`.trim();
       closeEpisode = true;
     }
@@ -274,14 +309,8 @@ export async function processAi(job: AiJob) {
     where: { id: episode.id, tenantId: job.tenantId },
     data: {
       aiTurnsUsed: updatedTurns,
-      isOpen: closeEpisode ? false : episode.isOpen,
+      isOpen: closeEpisode ? false : true,
     },
-  });
-
-  await getOutboundQueue().add("outbound_send_retry", {
-    tenantId: job.tenantId,
-    conversationId: conversation.id,
-    messageId: aiMessage.id,
   });
 
   await logAuditEvent({
