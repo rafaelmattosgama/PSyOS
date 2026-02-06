@@ -85,6 +85,7 @@ model User {
   grantsIssued         ConversationAccessGrant[] @relation("AccessGrantBy")
   aiPoliciesOwned      AiPolicy[] @relation("AiPolicyOwner")
   recordsCreated       Record[] @relation("RecordCreator")
+  messagesDeleted      Message[] @relation("MessageDeletedBy")
 
   @@unique([tenantId, email])
   @@unique([tenantId, phone])
@@ -148,6 +149,8 @@ model Message {
   ciphertext        String
   iv                String
   authTag           String
+  deletedAt         DateTime?
+  deletedByUserId   String?
   attachmentCiphertext String?
   attachmentIv         String?
   attachmentAuthTag    String?
@@ -158,6 +161,7 @@ model Message {
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])
+  deletedBy    User?        @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id])
 
   @@index([tenantId])
   @@index([conversationId, createdAt])

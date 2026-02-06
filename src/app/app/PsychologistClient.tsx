@@ -29,6 +29,7 @@ type MessageItem = {
   authorType: "PATIENT" | "PSYCHOLOGIST" | "AI" | "SYSTEM";
   content: string;
   createdAt: string;
+  deletedAt?: string | null;
   hasAttachment?: boolean;
   attachmentMime?: string | null;
 };
@@ -1410,6 +1411,35 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!selectedId) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/messages/${messageId}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Request failed");
+      }
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === messageId
+            ? { ...message, deletedAt: new Date().toISOString(), content: "" }
+            : message,
+        ),
+      );
+    } catch (error) {
+      setStatus((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const sendAudioBlob = async (blob: Blob) => {
     if (!selectedId) {
       return;
@@ -2325,7 +2355,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                       }`}
                     >
                       <div
-                        className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-black/5 ${
+                        className={`group relative max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-[0_14px_30px_var(--shadow-color)] ring-1 ring-black/5 ${
                           message.authorType === "PSYCHOLOGIST"
                             ? "bg-[color:var(--accent-500)] text-white"
                             : message.authorType === "AI"
@@ -2333,6 +2363,33 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                               : "bg-[color:var(--surface-100)] text-[color:var(--ink-900)]"
                         }`}
                       >
+                        {message.authorType !== "AI" &&
+                        message.authorType !== "SYSTEM" &&
+                        !message.deletedAt ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMessage(message.id)}
+                            className="absolute right-2 top-2 rounded-full border border-black/10 bg-white/80 p-1 text-[color:var(--ink-700)] opacity-0 transition hover:bg-white focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label={t.deleteMessage}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M6 6l1 14h10l1-14" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                          </button>
+                        ) : null}
                         {message.authorType !== "PATIENT" ? (
                           <p className="text-xs uppercase tracking-[0.2em] opacity-70">
                             {message.authorType === "AI"
@@ -2343,13 +2400,17 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                           </p>
                         ) : null}
                         <div className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
-                          {renderFormattedContent(
-                            message.authorType === "AI" && typingId === message.id
-                              ? message.content.slice(0, typingIndex)
-                              : message.content,
+                          {message.deletedAt ? (
+                            <p className="italic opacity-70">{t.messageDeleted}</p>
+                          ) : (
+                            renderFormattedContent(
+                              message.authorType === "AI" && typingId === message.id
+                                ? message.content.slice(0, typingIndex)
+                                : message.content,
+                            )
                           )}
                         </div>
-                        {message.hasAttachment ? (
+                        {message.hasAttachment && !message.deletedAt ? (
                           <div className="mt-3">
                             <AudioMessage
                               src={`/api/messages/attachment?messageId=${message.id}`}

@@ -49,11 +49,18 @@ export async function GET(request: Request) {
       direction: message.direction,
       authorType: message.authorType,
       createdAt: message.createdAt,
-      content: decryptMessage(message.ciphertext, message.iv, message.authTag, dek),
-      hasAttachment: Boolean(
-        (message as { attachmentCiphertext?: string }).attachmentCiphertext,
-      ),
-      attachmentMime: (message as { attachmentMime?: string | null }).attachmentMime ?? null,
+      deletedAt: message.deletedAt,
+      content: message.deletedAt
+        ? ""
+        : decryptMessage(message.ciphertext, message.iv, message.authTag, dek),
+      hasAttachment: message.deletedAt
+        ? false
+        : Boolean(
+            (message as { attachmentCiphertext?: string }).attachmentCiphertext,
+          ),
+      attachmentMime: message.deletedAt
+        ? null
+        : (message as { attachmentMime?: string | null }).attachmentMime ?? null,
     }));
 
   await logAuditEvent({
