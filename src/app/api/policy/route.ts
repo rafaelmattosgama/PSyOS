@@ -64,7 +64,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, session } = await requireAuth();
+  const { user } = await requireAuth();
   const body = updateSchema.parse(await request.json());
   if (body.tenantId !== user.tenantId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

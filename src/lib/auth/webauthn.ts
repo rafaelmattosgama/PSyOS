@@ -27,10 +27,6 @@ function toBase64Url(input: Uint8Array | string) {
   return Buffer.from(input).toString("base64url");
 }
 
-function fromBase64Url(input: string) {
-  return Buffer.from(input, "base64url");
-}
-
 function toUserIdBytes(userId: string) {
   return Buffer.from(userId, "utf8");
 }
@@ -82,7 +78,8 @@ export async function finishRegistration(params: {
   }
   const verification: VerifiedRegistrationResponse =
     await verifyRegistrationResponse({
-      response: params.response as any,
+      response:
+        params.response as Parameters<typeof verifyRegistrationResponse>[0]["response"],
       expectedChallenge,
       expectedOrigin: origin,
       expectedRPID: rpId,
@@ -132,7 +129,8 @@ export async function finishAuthentication(params: {
   }
   const verification: VerifiedAuthenticationResponse =
     await verifyAuthenticationResponse({
-      response: params.response as any,
+      response:
+        params.response as Parameters<typeof verifyAuthenticationResponse>[0]["response"],
       expectedChallenge,
       expectedOrigin: origin,
       expectedRPID: rpId,
@@ -140,7 +138,7 @@ export async function finishAuthentication(params: {
         credentialID: params.credential.id,
         credentialPublicKey: Buffer.from(params.credential.publicKey, "base64"),
         counter: params.credential.counter,
-      } as any,
+      } as Parameters<typeof verifyAuthenticationResponse>[0]["authenticator"],
     });
   if (!verification.verified) {
     throw new Error("WebAuthn authentication failed");

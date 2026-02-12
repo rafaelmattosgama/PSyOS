@@ -39,7 +39,6 @@ export async function callOpenAi(params: {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    // eslint-disable-next-line no-console
     console.error(
       `[openai] ${response.status} ${response.statusText} ${errorText || "no body"}`,
     );
@@ -54,7 +53,6 @@ export async function callOpenAi(params: {
   };
   const content = data.choices?.[0]?.message?.content?.trim() ?? "";
   if (!content) {
-    // eslint-disable-next-line no-console
     console.error("[openai] empty content response", {
       finishReason: data.choices?.[0]?.finish_reason,
       usage: data.usage,

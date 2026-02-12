@@ -16,7 +16,7 @@ export default async function PatientPage() {
   }
 
   return (
-    <div className="min-h-screen px-6 pb-12 pt-10">
+    <div className="min-h-dvh px-0 pb-0 pt-0 sm:px-6 sm:pb-12 sm:pt-10">
       <PatientClient tenantId={session.user.tenantId} />
     </div>
   );

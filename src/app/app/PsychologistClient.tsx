@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/lib/i18n";
 import {
+  CHAT_CARD_CLASS,
+  CHAT_COMPOSER_CLASS,
+  CHAT_GRID_CLASS,
+  CHAT_SECTION_CLASS,
+} from "@/components/chat/shell";
+import { useKeyboardInset } from "@/components/chat/useKeyboardInset";
+import {
   DEFAULT_SIGNAL_CONFIG,
   detectSignals,
   resolveSignalConfig,
@@ -552,6 +559,12 @@ const PSYCH_COPY: Record<
     recordSave: string;
     recordClose: string;
     sendPlaceholder: string;
+    scrollBottom: string;
+    closeMenuAria: string;
+    recordAudioLabel: string;
+    discardAudioLabel: string;
+    stopRecordingLabel: string;
+    sendAudioLabel: string;
     recording: string;
     audioPreview: string;
     demoSendDisabled: string;
@@ -655,6 +668,12 @@ const PSYCH_COPY: Record<
     recordSave: "Guardar registro",
     recordClose: "Cerrar",
     sendPlaceholder: "Escriba una respuesta...",
+    scrollBottom: "Ir al final",
+    closeMenuAria: "Cerrar menu",
+    recordAudioLabel: "Grabar audio",
+    discardAudioLabel: "Descartar audio",
+    stopRecordingLabel: "Detener grabacion",
+    sendAudioLabel: "Enviar audio",
     recording: "Grabando audio",
     audioPreview: "Previa del audio",
     demoSendDisabled: "Conversacion demo: envio desactivado.",
@@ -757,6 +776,12 @@ const PSYCH_COPY: Record<
     recordSave: "Salvar registro",
     recordClose: "Fechar",
     sendPlaceholder: "Escreva uma resposta...",
+    scrollBottom: "Ir para o fim",
+    closeMenuAria: "Fechar menu",
+    recordAudioLabel: "Gravar audio",
+    discardAudioLabel: "Descartar audio",
+    stopRecordingLabel: "Parar gravacao",
+    sendAudioLabel: "Enviar audio",
     recording: "Gravando audio",
     audioPreview: "Previa do audio",
     demoSendDisabled: "Conversa de demonstracao: envio desativado.",
@@ -859,6 +884,12 @@ const PSYCH_COPY: Record<
     recordSave: "Save record",
     recordClose: "Close",
     sendPlaceholder: "Write a reply...",
+    scrollBottom: "Go to bottom",
+    closeMenuAria: "Close menu",
+    recordAudioLabel: "Record audio",
+    discardAudioLabel: "Discard audio",
+    stopRecordingLabel: "Stop recording",
+    sendAudioLabel: "Send audio",
     recording: "Recording audio",
     audioPreview: "Audio preview",
     demoSendDisabled: "Demo conversation: sending disabled.",
@@ -943,10 +974,11 @@ async function sendJson<T>(
 
 export default function PsychologistClient({ tenantId, psychologistName }: Props) {
   const { t, language } = useLanguage();
+  const keyboardInset = useKeyboardInset();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [records, setRecords] = useState<RecordItem[]>([]);
+  const [, setRecords] = useState<RecordItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -1798,7 +1830,6 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
       loadEpisode(selectedId);
     }, 5000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
@@ -1808,6 +1839,17 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
     }
     container.scrollTop = container.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    if (!keyboardInset || !shouldAutoScrollRef.current) {
+      return;
+    }
+    const container = messageListRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
+  }, [keyboardInset]);
 
   const handleMessageScroll = () => {
     const container = messageListRef.current;
@@ -2043,7 +2085,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
   }, [messageDraft]);
 
   return (
-    <div className="mx-auto grid w-full gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className={CHAT_GRID_CLASS}>
       <aside className="hidden lg:flex lg:h-[calc(100vh-48px)] lg:min-h-0 lg:flex-col lg:gap-6 lg:overflow-hidden">
         {asideContent}
       </aside>
@@ -2054,7 +2096,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
             type="button"
             className="absolute inset-0 bg-black/30"
             onClick={() => setIsMobileMenuOpen(false)}
-            aria-label="Fechar menu"
+            aria-label={psychCopy.closeMenuAria}
           />
           <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm overflow-y-auto bg-[color:var(--surface-100)] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
             <div className="mb-4 flex items-center justify-between">
@@ -2074,8 +2116,8 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
         </div>
       ) : null}
 
-      <section className="flex min-h-0 flex-col gap-6 lg:h-[calc(100vh-48px)]">
-        <div className="flex h-[calc(100svh-96px)] flex-1 flex-col overflow-hidden rounded-[28px] border border-black/10 bg-white/85 p-6 shadow-[0_18px_40px_var(--shadow-color)] lg:h-full">
+      <section className={CHAT_SECTION_CLASS}>
+        <div className={CHAT_CARD_CLASS}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
@@ -2446,12 +2488,17 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                 onClick={scrollToBottom}
                 className="absolute bottom-3 right-2 rounded-full border border-black/10 bg-white/90 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)] shadow-[0_8px_18px_var(--shadow-color)]"
               >
-                Ir para o fim
+                {psychCopy.scrollBottom}
               </button>
             ) : null}
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 border-t border-black/10 pt-4 sm:flex-row sm:items-start">
+          <div
+            className={CHAT_COMPOSER_CLASS}
+            style={{
+              paddingBottom: `calc(env(safe-area-inset-bottom) + ${keyboardInset}px)`,
+            }}
+          >
             {isRecording || pendingAudioBlob ? null : (
               <textarea
                 ref={messageInputRef}
@@ -2510,7 +2557,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                     type="button"
                     onClick={startRecording}
                     disabled={loading || !selectedId || selectedId === DEMO_CONVERSATION_ID}
-                    aria-label="Gravar audio"
+                    aria-label={psychCopy.recordAudioLabel}
                   >
                     <svg
                       aria-hidden="true"
@@ -2534,7 +2581,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                     className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white"
                     type="button"
                     onClick={stopRecording}
-                    aria-label="Parar gravacao"
+                    aria-label={psychCopy.stopRecordingLabel}
                   >
                     <svg
                       aria-hidden="true"
@@ -2556,7 +2603,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                     className="flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/90 text-[color:var(--ink-900)]"
                     type="button"
                     onClick={cancelRecording}
-                    aria-label="Descartar audio"
+                    aria-label={psychCopy.discardAudioLabel}
                   >
                     <svg
                       aria-hidden="true"
@@ -2582,7 +2629,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                     type="button"
                     onClick={sendPendingAudio}
                     disabled={loading}
-                    aria-label="Enviar audio"
+                    aria-label={psychCopy.sendAudioLabel}
                   >
                     <svg
                       aria-hidden="true"

@@ -74,7 +74,7 @@ export default async function AdminPage() {
   }));
 
   return (
-    <div className="min-h-screen px-6 pb-16 pt-10">
+    <div className="min-h-dvh px-6 pb-16 pt-10">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

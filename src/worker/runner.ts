@@ -19,15 +19,13 @@ const aiWorker = new Worker(
 );
 
 const logFailure =
-  (label: string) => (job: Job | undefined, error: Error, _prev?: string) => {
-    // eslint-disable-next-line no-console
+  (label: string) => (job: Job | undefined, error: Error) => {
     console.error(`[worker:${label}] job ${job?.id ?? "unknown"} failed:`, error.message);
   };
 
 inboundWorker.on("failed", logFailure("inbound"));
 aiWorker.on("failed", logFailure("ai"));
 
-// eslint-disable-next-line no-console
 console.log(
   "Worker running",
   `| OPENAI_MODEL=${process.env.OPENAI_MODEL ?? "unset"}`,

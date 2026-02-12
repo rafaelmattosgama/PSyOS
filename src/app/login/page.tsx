@@ -37,6 +37,16 @@ export default function LoginPage() {
   const [stage, setStage] = useState<Stage>("email");
   const [status, setStatus] = useState<StatusState>(initialStatus);
   const router = useRouter();
+
+  function handleResetViaLink(token: string, emailParam: string | null) {
+    setStage("reset_confirm");
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+    setResetToken(token);
+    setStatus(initialStatus);
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -44,9 +54,9 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("reset");
     if (token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleResetViaLink(token, params.get("email"));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setLoading = (message: string) =>
@@ -160,7 +170,7 @@ export default function LoginPage() {
       setLoading(t.statusCheckEmail);
       await postJson("/api/auth/password/reset/request", { email });
       setSuccess(t.resetLinkSent);
-    } catch (error) {
+    } catch {
       setSuccess(t.resetLinkSent);
     }
   };
@@ -199,17 +209,8 @@ export default function LoginPage() {
     setStatus(initialStatus);
   };
 
-  const handleResetViaLink = (token: string, emailParam: string | null) => {
-    setStage("reset_confirm");
-    if (emailParam) {
-      setEmail(emailParam);
-    }
-    setResetToken(token);
-    setStatus(initialStatus);
-  };
-
   return (
-    <div className="min-h-screen px-6 pb-16 pt-12">
+    <div className="min-h-dvh px-6 pb-16 pt-12">
       <div className="mx-auto w-full max-w-5xl">
         <header className="rounded-[28px] border border-black/10 bg-white/80 p-8 shadow-[0_18px_40px_var(--shadow-color)]">
           <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">

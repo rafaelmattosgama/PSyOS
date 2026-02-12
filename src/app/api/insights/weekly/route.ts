@@ -37,8 +37,6 @@ const addDays = (value: Date, days: number) => {
   return date;
 };
 
-const toIsoDate = (value: Date) => value.toISOString().slice(0, 10);
-
 async function loadSignalConfig(tenantId: string, userId: string) {
   const policy = await prisma.aiPolicy.findFirst({
     where: { tenantId, ownerUserId: userId },

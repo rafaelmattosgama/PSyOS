@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       attachmentMime: file.type || "audio/mpeg",
       attachmentSize: file.size,
     },
-  } as any);
+  });
 
   await logAuditEvent({
     tenantId: user.tenantId,

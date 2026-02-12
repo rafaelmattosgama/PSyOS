@@ -308,25 +308,17 @@ async function main() {
 
   await ensureTenantPolicy(tenant.id);
 
-  // eslint-disable-next-line no-console
   console.log("Seed complete");
-  // eslint-disable-next-line no-console
   console.log("Tenant:", tenant.id, tenant.name);
-  // eslint-disable-next-line no-console
   console.log("Admin:", admin.email);
-  // eslint-disable-next-line no-console
   console.log("System admin:", systemAdmin.email);
-  // eslint-disable-next-line no-console
   console.log("Psicologo:", psychologist.email);
-  // eslint-disable-next-line no-console
   console.log("Paciente:", patient.email);
-  // eslint-disable-next-line no-console
   console.log("Senha:", DEFAULT_PASSWORD);
 }
 
 main()
   .catch((error) => {
-    // eslint-disable-next-line no-console
     console.error(error);
     process.exit(1);
   })

@@ -85,6 +85,15 @@ const translations = {
     patientSendPlaceholder: "Escribe tu mensaje...",
     patientSend: "Enviar",
     patientScrollBottom: "Ir al final",
+    patientMenu: "Menu",
+    commonClose: "Cerrar",
+    patientRecording: "Grabando audio",
+    patientAudioPreview: "Vista previa del audio",
+    patientUnsupportedAudio: "Grabacion de audio no compatible en este navegador.",
+    patientRecordAudioLabel: "Grabar audio",
+    patientDiscardAudioLabel: "Descartar audio",
+    patientStopRecordingLabel: "Detener grabacion",
+    patientSendAudioLabel: "Enviar audio",
     patientYou: "Tú",
     assistantLabel: "Asistente",
     messageDeleted: "Mensaje eliminado",
@@ -172,6 +181,15 @@ const translations = {
     patientSendPlaceholder: "Digite sua mensagem...",
     patientSend: "Enviar",
     patientScrollBottom: "Ir para o fim",
+    patientMenu: "Menu",
+    commonClose: "Fechar",
+    patientRecording: "Gravando audio",
+    patientAudioPreview: "Previa do audio",
+    patientUnsupportedAudio: "Gravacao de audio nao suportada neste navegador.",
+    patientRecordAudioLabel: "Gravar audio",
+    patientDiscardAudioLabel: "Descartar audio",
+    patientStopRecordingLabel: "Parar gravacao",
+    patientSendAudioLabel: "Enviar audio",
     patientYou: "Você",
     assistantLabel: "Assistente",
     messageDeleted: "Mensagem removida",
@@ -260,6 +278,15 @@ const translations = {
     patientSendPlaceholder: "Write your message...",
     patientSend: "Send",
     patientScrollBottom: "Go to bottom",
+    patientMenu: "Menu",
+    commonClose: "Close",
+    patientRecording: "Recording audio",
+    patientAudioPreview: "Audio preview",
+    patientUnsupportedAudio: "Audio recording is not supported in this browser.",
+    patientRecordAudioLabel: "Record audio",
+    patientDiscardAudioLabel: "Discard audio",
+    patientStopRecordingLabel: "Stop recording",
+    patientSendAudioLabel: "Send audio",
     patientYou: "You",
     assistantLabel: "Assistant",
     messageDeleted: "Message deleted",
@@ -278,16 +305,21 @@ const translations = {
 };
 
 export function useLanguage() {
-  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
-
-  useEffect(() => {
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_LANGUAGE;
+    }
     const stored = localStorage.getItem(STORAGE_KEY) as Language | null;
     if (stored && ["es", "pt", "en"].includes(stored)) {
-      setLanguage(stored);
+      return stored;
     }
-  }, []);
+    return DEFAULT_LANGUAGE;
+  });
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     localStorage.setItem(STORAGE_KEY, language);
     document.documentElement.lang = language;
   }, [language]);

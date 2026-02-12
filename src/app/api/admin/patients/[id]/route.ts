@@ -50,14 +50,24 @@ export async function PATCH(
     },
   });
 
-  if (body.displayName || body.phoneE164 || body.preferredLanguage) {
+  if (
+    body.displayName !== undefined ||
+    body.phoneE164 !== undefined ||
+    body.preferredLanguage !== undefined
+  ) {
+    const profileData: Prisma.PatientProfileUpdateManyMutationInput = {};
+    if (body.displayName !== undefined) {
+      profileData.displayName = body.displayName;
+    }
+    if (body.phoneE164 !== undefined) {
+      profileData.phoneE164 = body.phoneE164;
+    }
+    if (body.preferredLanguage !== undefined) {
+      profileData.preferredLanguage = body.preferredLanguage;
+    }
     await prisma.patientProfile.updateMany({
       where: { userId: id },
-      data: {
-        displayName: body.displayName,
-        phoneE164: body.phoneE164,
-        preferredLanguage: body.preferredLanguage,
-      } as any,
+      data: profileData,
     });
   }
 

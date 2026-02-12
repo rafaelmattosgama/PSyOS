@@ -24,7 +24,7 @@ export default async function SystemPage() {
   }));
 
   return (
-    <div className="min-h-screen px-6 pb-16 pt-10">
+    <div className="min-h-dvh px-6 pb-16 pt-10">
       <div className="mx-auto w-full max-w-5xl space-y-8">
         <header className="rounded-[28px] border border-black/10 bg-white/80 p-8 shadow-[0_18px_40px_var(--shadow-color)]">
           <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">

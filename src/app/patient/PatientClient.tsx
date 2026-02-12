@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n";
+import {
+  CHAT_CARD_CLASS,
+  CHAT_COMPOSER_CLASS,
+  CHAT_GRID_CLASS,
+  CHAT_SECTION_CLASS,
+} from "@/components/chat/shell";
+import { useKeyboardInset } from "@/components/chat/useKeyboardInset";
 
 type ConversationItem = {
   id: string;
@@ -244,6 +251,7 @@ async function postJson<T>(url: string, payload: Record<string, unknown>) {
 
 export default function PatientClient({ tenantId }: Props) {
   const { language, setLanguage, t } = useLanguage();
+  const keyboardInset = useKeyboardInset();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -502,7 +510,7 @@ export default function PatientClient({ tenantId }: Props) {
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setStatus("Gravacao de audio nao suportada neste navegador.");
+      setStatus(t.patientUnsupportedAudio);
       return;
     }
     try {
@@ -605,7 +613,6 @@ export default function PatientClient({ tenantId }: Props) {
     if (selectedId) {
       loadMessages(selectedId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
@@ -616,7 +623,6 @@ export default function PatientClient({ tenantId }: Props) {
       loadMessages(selectedId, { silent: true });
     }, 5000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
@@ -626,6 +632,17 @@ export default function PatientClient({ tenantId }: Props) {
     }
     container.scrollTop = container.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    if (!keyboardInset || !shouldAutoScrollRef.current) {
+      return;
+    }
+    const container = messageListRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
+  }, [keyboardInset]);
 
   const handleMessageScroll = () => {
     const container = messageListRef.current;
@@ -744,7 +761,7 @@ export default function PatientClient({ tenantId }: Props) {
   }, [messageDraft]);
 
   return (
-    <div className="mx-auto grid w-full gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className={CHAT_GRID_CLASS}>
       <aside className="hidden lg:flex lg:flex-col lg:gap-6">{asideContent}</aside>
 
       {isMobileMenuOpen ? (
@@ -753,19 +770,19 @@ export default function PatientClient({ tenantId }: Props) {
             type="button"
             className="absolute inset-0 bg-black/30"
             onClick={() => setIsMobileMenuOpen(false)}
-            aria-label="Fechar menu"
+            aria-label={t.commonClose}
           />
           <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm overflow-y-auto bg-[color:var(--surface-100)] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
             <div className="mb-4 flex items-center justify-between">
               <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-                Menu
+                {t.patientMenu}
               </p>
               <button
                 type="button"
                 className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)]"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Fechar
+                {t.commonClose}
               </button>
             </div>
             {asideContent}
@@ -773,8 +790,8 @@ export default function PatientClient({ tenantId }: Props) {
         </div>
       ) : null}
 
-      <section className="flex min-h-0 flex-col gap-6 lg:h-[calc(100vh-48px)]">
-        <div className="flex h-[calc(100svh-96px)] flex-1 flex-col overflow-hidden rounded-[28px] border border-black/10 bg-white/85 p-6 shadow-[0_18px_40px_var(--shadow-color)] lg:h-full">
+      <section className={CHAT_SECTION_CLASS}>
+        <div className={CHAT_CARD_CLASS}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
@@ -797,7 +814,7 @@ export default function PatientClient({ tenantId }: Props) {
                 type="button"
                 onClick={() => setIsMobileMenuOpen(true)}
               >
-                Menu
+                {t.patientMenu}
               </button>
               <span>
                 {selectedConversation?.aiEnabled ? t.patientAiOn : t.patientAiOff}
@@ -930,7 +947,12 @@ export default function PatientClient({ tenantId }: Props) {
             ) : null}
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 border-t border-black/10 pt-4 sm:flex-row sm:items-start">
+          <div
+            className={CHAT_COMPOSER_CLASS}
+            style={{
+              paddingBottom: `calc(env(safe-area-inset-bottom) + ${keyboardInset}px)`,
+            }}
+          >
             {isRecording || pendingAudioBlob ? null : (
               <textarea
                 ref={messageInputRef}
@@ -954,7 +976,7 @@ export default function PatientClient({ tenantId }: Props) {
               {isRecording ? (
                 <div className="flex w-full flex-col gap-2">
                   <div className="flex items-center justify-between text-xs text-[color:var(--ink-500)]">
-                    <span>Gravando audio</span>
+                    <span>{t.patientRecording}</span>
                     <span>{formatSeconds(recordSeconds)}</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
@@ -974,7 +996,7 @@ export default function PatientClient({ tenantId }: Props) {
                 <div className="flex w-full flex-col gap-2">
                   <audio controls src={pendingAudioUrl} className="w-full" />
                   <div className="flex items-center justify-between text-xs text-[color:var(--ink-500)]">
-                    <span>Previa do audio</span>
+                    <span>{t.patientAudioPreview}</span>
                     <span>{formatSeconds(recordSeconds)}</span>
                   </div>
                 </div>
@@ -990,7 +1012,7 @@ export default function PatientClient({ tenantId }: Props) {
                     type="button"
                     onClick={startRecording}
                     disabled={loading || !selectedId}
-                    aria-label="Gravar audio"
+                    aria-label={t.patientRecordAudioLabel}
                   >
                     <svg
                       aria-hidden="true"
@@ -1014,7 +1036,7 @@ export default function PatientClient({ tenantId }: Props) {
                     className="flex h-12 w-12 items-center justify-center rounded-full border border-black/10 bg-white/90 text-[color:var(--ink-900)]"
                     type="button"
                     onClick={cancelRecording}
-                    aria-label="Descartar audio"
+                    aria-label={t.patientDiscardAudioLabel}
                   >
                     <svg
                       aria-hidden="true"
@@ -1039,7 +1061,7 @@ export default function PatientClient({ tenantId }: Props) {
                     className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white"
                     type="button"
                     onClick={stopRecording}
-                    aria-label="Parar gravacao"
+                    aria-label={t.patientStopRecordingLabel}
                   >
                     <svg
                       aria-hidden="true"
@@ -1062,7 +1084,7 @@ export default function PatientClient({ tenantId }: Props) {
                     type="button"
                     onClick={sendPendingAudio}
                     disabled={loading}
-                    aria-label="Enviar audio"
+                    aria-label={t.patientSendAudioLabel}
                   >
                     <svg
                       aria-hidden="true"

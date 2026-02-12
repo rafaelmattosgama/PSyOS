@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       code: body.code,
       purpose,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
   }
 

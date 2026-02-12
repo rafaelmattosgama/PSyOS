@@ -21,11 +21,12 @@ export default async function PsychologistPage() {
   });
 
   return (
-    <div className="min-h-screen px-6 pb-12 pt-10">
+    <div className="min-h-dvh px-0 pb-0 pt-0 sm:px-6 sm:pb-12 sm:pt-10">
       <PsychologistClient
         tenantId={session.user.tenantId}
-        psychologistName={profile?.displayName ?? session.user.email ?? "Psicólogo"}
+        psychologistName={profile?.displayName ?? session.user.email ?? "Psicologo"}
       />
     </div>
   );
 }
+

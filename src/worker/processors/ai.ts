@@ -107,7 +107,6 @@ function buildUnavailableReply(language: keyof typeof WORKER_COPY) {
 }
 
 export async function processAi(job: AiJob) {
-  // eslint-disable-next-line no-console
   console.log("[ai] process start", {
     conversationId: job.conversationId,
     tenantId: job.tenantId,
@@ -119,7 +118,6 @@ export async function processAi(job: AiJob) {
     include: { patient: { include: { patientProfile: true } } },
   });
   if (!conversation || !conversation.aiEnabled) {
-    // eslint-disable-next-line no-console
     console.log("[ai] skipped: no conversation or AI disabled");
     return;
   }
@@ -239,7 +237,6 @@ export async function processAi(job: AiJob) {
       messages: [{ role: "system", content: prompt }, ...context],
     });
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error("[ai] prompt snapshot failed:", (error as Error).message);
   }
 
@@ -251,7 +248,6 @@ export async function processAi(job: AiJob) {
     closeEpisode = true;
   } else {
     try {
-      // eslint-disable-next-line no-console
       console.log("[ai] calling OpenAI", {
         model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
         maxTokens,
@@ -263,12 +259,9 @@ export async function processAi(job: AiJob) {
         maxTokens,
         temperature,
       });
-      // eslint-disable-next-line no-console
       console.log("[ai] OpenAI reply length", reply?.length ?? 0);
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error("[ai] OpenAI error:", (error as Error).message);
-      // eslint-disable-next-line no-console
       console.error("[ai] OpenAI error stack:", (error as Error).stack ?? "no stack");
       reply = buildUnavailableReply(workerLanguage);
       closeEpisode = !disableEpisodeLimit;
@@ -279,7 +272,6 @@ export async function processAi(job: AiJob) {
         reply = buildClosingReply(workerLanguage);
         closeEpisode = true;
       }
-      // eslint-disable-next-line no-console
       console.error("[ai] Empty reply after OpenAI call; using fallback", {
         disableEpisodeLimit,
         remainingTurns,
