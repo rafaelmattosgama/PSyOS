@@ -21,7 +21,7 @@ export default async function PsychologistPage() {
   });
 
   return (
-    <div className="min-h-dvh px-0 pb-0 pt-0 sm:px-6 sm:pb-12 sm:pt-10">
+    <div className="h-dvh overflow-hidden px-0 pb-0 pt-0 sm:h-auto sm:min-h-dvh sm:overflow-visible sm:px-6 sm:pb-12 sm:pt-10">
       <PsychologistClient
         tenantId={session.user.tenantId}
         psychologistName={profile?.displayName ?? session.user.email ?? "Psicologo"}

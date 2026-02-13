@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/lib/i18n";
@@ -1256,11 +1256,22 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
 
   const loadMessages = async (
     conversationId: string,
-    options?: { silent?: boolean },
+    options?: { silent?: boolean; forceBottom?: boolean },
   ) => {
     if (conversationId === DEMO_CONVERSATION_ID) {
       setMessages(demoMessages);
       setRecords([]);
+      if (options?.forceBottom) {
+        requestAnimationFrame(() => {
+          const container = messageListRef.current;
+          if (!container) {
+            return;
+          }
+          container.scrollTop = container.scrollHeight;
+          shouldAutoScrollRef.current = true;
+          setShowScrollToBottom(false);
+        });
+      }
       return;
     }
     if (!options?.silent) {
@@ -1271,6 +1282,17 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
         `/api/messages?conversationId=${conversationId}`,
       );
       setMessages(data.items ?? []);
+      if (options?.forceBottom) {
+        requestAnimationFrame(() => {
+          const container = messageListRef.current;
+          if (!container) {
+            return;
+          }
+          container.scrollTop = container.scrollHeight;
+          shouldAutoScrollRef.current = true;
+          setShowScrollToBottom(false);
+        });
+      }
       setStatus("");
     } catch (error) {
       setStatus((error as Error).message);
@@ -1411,7 +1433,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
     setShowPsychPolicy(false);
     setShowInsights(false);
     await Promise.all([
-      loadMessages(conversationId),
+      loadMessages(conversationId, { forceBottom: true }),
       loadPolicies(conversationId),
       loadEpisode(conversationId),
       loadRecords(conversationId),
@@ -1435,7 +1457,10 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
         content: messageDraft.trim(),
       });
       setMessageDraft("");
-      await Promise.all([loadMessages(selectedId), loadEpisode(selectedId)]);
+      await Promise.all([
+        loadMessages(selectedId, { forceBottom: true }),
+        loadEpisode(selectedId),
+      ]);
     } catch (error) {
       setStatus((error as Error).message);
     } finally {
@@ -1490,7 +1515,10 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
       if (!response.ok) {
         throw new Error(data.error ?? "Request failed");
       }
-      await Promise.all([loadMessages(selectedId), loadEpisode(selectedId)]);
+      await Promise.all([
+        loadMessages(selectedId, { forceBottom: true }),
+        loadEpisode(selectedId),
+      ]);
     } catch (error) {
       setStatus((error as Error).message);
     } finally {
@@ -1805,9 +1833,11 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
   }, []);
 
   useEffect(() => {
-      if (selectedId) {
-        loadMessages(selectedId);
-        loadPolicies(selectedId);
+    if (selectedId) {
+      shouldAutoScrollRef.current = true;
+      setShowScrollToBottom(false);
+      loadMessages(selectedId, { forceBottom: true });
+      loadPolicies(selectedId);
       setShowConversationPolicy(false);
       setShowRecord(false);
       shouldAutoScrollRef.current = true;
@@ -2100,8 +2130,24 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
           />
           <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm overflow-y-auto bg-[color:var(--surface-100)] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-                {psychCopy.menu}
+              <p
+                className="flex h-7 w-7 items-center justify-center text-[color:var(--ink-500)]"
+                aria-label={psychCopy.menu}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M3 12h18" />
+                  <path d="M3 18h18" />
+                </svg>
               </p>
               <button
                 type="button"
@@ -2118,7 +2164,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
 
       <section className={CHAT_SECTION_CLASS}>
         <div className={CHAT_CARD_CLASS}>
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="sticky top-0 z-20 -mx-4 -mt-4 flex flex-wrap items-center justify-between gap-4 border-b border-black/10 bg-white/90 px-4 pb-3 pt-4 backdrop-blur-sm sm:-mx-6 sm:-mt-6 sm:px-6 sm:pt-6">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
                 {psychCopy.activeChat}
@@ -2133,11 +2179,25 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
-                className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)] lg:hidden"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 text-[color:var(--ink-900)] lg:hidden"
                 type="button"
                 onClick={() => setIsMobileMenuOpen(true)}
+                aria-label={psychCopy.menu}
               >
-                {psychCopy.menu}
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M3 12h18" />
+                  <path d="M3 18h18" />
+                </svg>
               </button>
               <span className="text-xs text-[color:var(--ink-500)]">
                 {selectedConversation?.aiEnabled ? psychCopy.aiOn : psychCopy.aiOff}
@@ -2368,12 +2428,12 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
             </div>
           ) : null}
 
-          <div className="relative mt-6 flex-1 min-h-0">
-            <div
-              ref={messageListRef}
-              onScroll={handleMessageScroll}
-            className="h-full space-y-4 overflow-y-auto px-2 pb-2 pt-1"
-            >
+          <div className="relative mt-4 flex-1 min-h-0">
+              <div
+                ref={messageListRef}
+                onScroll={handleMessageScroll}
+                className="h-full space-y-4 overflow-y-auto overscroll-contain px-2 pb-28 pt-1 sm:pb-2"
+              >
               {messages.map((message, index) => {
                 const previous = messages[index - 1];
                 const showDayLabel =
@@ -2685,7 +2745,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                     {psychCopy.promptTitle}
                   </p>
                 <p className="text-sm text-[color:var(--ink-900)]">
-                  {promptSnapshot?.model ?? "preview"} ·{" "}
+                  {promptSnapshot?.model ?? "preview"} Â·{" "}
                   {promptSnapshot?.createdAt
                     ? new Date(promptSnapshot.createdAt).toLocaleString()
                     : "sem timestamp"}
@@ -3283,7 +3343,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                               key={emotion.label}
                               className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs text-emerald-900"
                             >
-                              {emotion.label} · {emotion.count}
+                              {emotion.label} Â· {emotion.count}
                             </span>
                           ))
                         )}
@@ -3304,7 +3364,7 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
                               key={signal.key}
                               className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-900"
                             >
-                              {summarySignalLabels[signal.key]} · {signal.count}
+                              {summarySignalLabels[signal.key]} Â· {signal.count}
                             </span>
                           ))
                         )}
@@ -3368,4 +3428,5 @@ export default function PsychologistClient({ tenantId, psychologistName }: Props
     </div>
   );
 }
+
 

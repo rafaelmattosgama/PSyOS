@@ -390,7 +390,7 @@ export default function PatientClient({ tenantId }: Props) {
 
   const loadMessages = async (
     conversationId: string,
-    options?: { silent?: boolean },
+    options?: { silent?: boolean; forceBottom?: boolean },
   ) => {
     if (!options?.silent) {
       setLoading(true);
@@ -400,6 +400,17 @@ export default function PatientClient({ tenantId }: Props) {
         `/api/messages?conversationId=${conversationId}`,
       );
       setMessages(data.items ?? []);
+      if (options?.forceBottom) {
+        requestAnimationFrame(() => {
+          const container = messageListRef.current;
+          if (!container) {
+            return;
+          }
+          container.scrollTop = container.scrollHeight;
+          shouldAutoScrollRef.current = true;
+          setShowScrollToBottom(false);
+        });
+      }
       setStatus("");
     } catch (error) {
       setStatus((error as Error).message);
@@ -415,7 +426,7 @@ export default function PatientClient({ tenantId }: Props) {
     shouldAutoScrollRef.current = true;
     setShowScrollToBottom(false);
     setIsMobileMenuOpen(false);
-    await loadMessages(conversationId);
+    await loadMessages(conversationId, { forceBottom: true });
   };
 
   const handleSendMessage = async () => {
@@ -443,7 +454,7 @@ export default function PatientClient({ tenantId }: Props) {
         content: trimmed,
       });
       setMessageDraft("");
-      await loadMessages(selectedId, { silent: true });
+      await loadMessages(selectedId, { silent: true, forceBottom: true });
     } catch (error) {
       setMessages(previousMessages);
       setStatus((error as Error).message);
@@ -497,7 +508,7 @@ export default function PatientClient({ tenantId }: Props) {
       if (!response.ok) {
         throw new Error(data.error ?? "Request failed");
       }
-      await loadMessages(selectedId);
+      await loadMessages(selectedId, { forceBottom: true });
     } catch (error) {
       setStatus((error as Error).message);
     } finally {
@@ -611,7 +622,9 @@ export default function PatientClient({ tenantId }: Props) {
 
   useEffect(() => {
     if (selectedId) {
-      loadMessages(selectedId);
+      shouldAutoScrollRef.current = true;
+      setShowScrollToBottom(false);
+      loadMessages(selectedId, { forceBottom: true });
     }
   }, [selectedId]);
 
@@ -774,8 +787,24 @@ export default function PatientClient({ tenantId }: Props) {
           />
           <div className="absolute left-0 top-0 h-full w-[88%] max-w-sm overflow-y-auto bg-[color:var(--surface-100)] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-                {t.patientMenu}
+              <p
+                className="flex h-7 w-7 items-center justify-center text-[color:var(--ink-500)]"
+                aria-label={t.patientMenu}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M3 12h18" />
+                  <path d="M3 18h18" />
+                </svg>
               </p>
               <button
                 type="button"
@@ -792,41 +821,49 @@ export default function PatientClient({ tenantId }: Props) {
 
       <section className={CHAT_SECTION_CLASS}>
         <div className={CHAT_CARD_CLASS}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-500)]">
-                {t.patientHistoryTag}
-              </p>
-              <h2 className="text-2xl text-[color:var(--ink-900)]">
-                {selectedConversation
-                  ? `${t.patientConversationWith} ${
-                      selectedConversation.psychologist.psychologistProfile
+          <div className="-mx-4 -mt-4 border-b border-black/10 bg-white/90 px-4 pb-3 pt-4 backdrop-blur-sm sm:-mx-6 sm:-mt-6 sm:px-6 sm:pt-6">
+            <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl text-[color:var(--ink-900)]">
+                  {selectedConversation
+                    ? selectedConversation.psychologist.psychologistProfile
                         ?.displayName ??
                       selectedConversation.psychologist.email ??
                       t.patientDefaultPsychologist
-                    }`
-                  : t.patientNoConversation}
-              </h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-500)]">
-              <button
-                className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-[color:var(--ink-900)] lg:hidden"
-                type="button"
-                onClick={() => setIsMobileMenuOpen(true)}
-              >
-                {t.patientMenu}
-              </button>
-              <span>
-                {selectedConversation?.aiEnabled ? t.patientAiOn : t.patientAiOff}
-              </span>
+                    : t.patientNoConversation}
+                </h2>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-500)]">
+                <button
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 text-[color:var(--ink-900)] lg:hidden"
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  aria-label={t.patientMenu}
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 6h18" />
+                    <path d="M3 12h18" />
+                    <path d="M3 18h18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="relative mt-6 flex-1 min-h-0">
+          <div className="relative mt-4 flex-1 min-h-0">
             <div
               ref={messageListRef}
               onScroll={handleMessageScroll}
-              className="h-full space-y-4 overflow-y-auto px-2 pb-2 pt-1"
+              className="h-full space-y-4 overflow-y-auto overscroll-contain px-2 pb-28 pt-1 sm:pb-2"
             >
               {messages.map((message, index) => {
                 const previous = messages[index - 1];
