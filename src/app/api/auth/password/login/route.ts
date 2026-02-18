@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, RateLimitExceededError } from "@/lib/rate-limit";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { resolveHomeForUser } from "@/lib/auth/portal";
@@ -19,11 +19,21 @@ const LOCKOUT_MINUTES = 15;
 export async function POST(request: Request) {
   const body = schema.parse(await request.json());
 
-  await enforceRateLimit({
-    key: `password:${body.email}`,
-    limit: 10,
-    windowSeconds: 60 * 5,
-  });
+  try {
+    await enforceRateLimit({
+      key: `password:${body.email}`,
+      limit: 10,
+      windowSeconds: 60 * 5,
+    });
+  } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: "Too many attempts. Try again in a few minutes." },
+        { status: 429 },
+      );
+    }
+    throw error;
+  }
 
   const user = await prisma.user.findFirst({
     where: { email: body.email },
