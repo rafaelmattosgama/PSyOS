@@ -12,8 +12,10 @@ export function getRedis(): Redis {
     throw new Error("REDIS_URL is not configured");
   }
 
+  const password = process.env.REDIS_PASSWORD;
   const redis = new Redis(url, {
     maxRetriesPerRequest: null,
+    ...(password ? { password } : {}),
   });
 
   globalForRedis.redis = redis;
@@ -34,6 +36,9 @@ export function getRedisConnectionOptions(): RedisOptions {
 
   if (parsed.password) {
     options.password = decodeURIComponent(parsed.password);
+  }
+  if (process.env.REDIS_PASSWORD) {
+    options.password = process.env.REDIS_PASSWORD;
   }
 
   if (parsed.pathname && parsed.pathname !== "/") {

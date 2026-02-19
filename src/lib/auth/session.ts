@@ -30,7 +30,10 @@ export async function createSession(params: {
     ? new Date(issuedAt.getTime() + STEP_UP_MINUTES * 60 * 1000)
     : null;
   const headerStore = await headers();
-  const ip = headerStore.get("x-forwarded-for") ?? headerStore.get("x-real-ip");
+  const forwardedFor = headerStore.get("x-forwarded-for");
+  const ip =
+    forwardedFor?.split(",")[0]?.trim() ??
+    headerStore.get("x-real-ip");
   const userAgent = headerStore.get("user-agent");
 
   await prisma.session.create({

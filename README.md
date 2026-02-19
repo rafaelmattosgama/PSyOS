@@ -72,6 +72,7 @@ Cria um tenant e usuarios com senha padrao.
 ```
 DATABASE_URL=postgresql://psyos:psyos@localhost:5432/psyos
 REDIS_URL=redis://localhost:6379
+REDIS_PASSWORD=change-me-strong-redis-password
 MASTER_KEK_B64=base64_32_bytes
 
 OPENAI_API_KEY=sk-...
@@ -80,6 +81,9 @@ OPENAI_MODEL=gpt-4o-mini
 WEBAUTHN_RP_NAME=PsyOS
 WEBAUTHN_RP_ID=localhost
 WEBAUTHN_ORIGIN=http://localhost:3000
+
+APP_URL=http://localhost:3000
+EVOLUTION_WEBHOOK_SECRET=change-me-webhook-secret
 
 SMTP_URL=smtps://user:pass@smtp.example.com
 EMAIL_FROM=psyos@clinic.com
@@ -163,3 +167,6 @@ APIs:
 - Lockout por tentativas falhas.
 - Step-up exigido para acoes sensiveis (policy global, leitura admin).
 - Logs sem dados sensiveis (sem conteudo de mensagens ou OTP).
+- Em `docker-compose.prod.yml`, Redis nao e exposto publicamente e exige senha (`REDIS_PASSWORD`).
+- Em `docker-compose.prod.yml`, Postgres fica apenas na rede interna Docker (sem porta publica no host).
+- Webhook de evolucao exige segredo via header (`x-webhook-secret` ou `Authorization: Bearer ...`) em producao.

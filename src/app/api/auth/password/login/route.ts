@@ -7,6 +7,7 @@ import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { resolveHomeForUser } from "@/lib/auth/portal";
 import { logAuditEvent } from "@/lib/audit";
+import { getClientIp } from "@/lib/request";
 
 const schema = z.object({
   email: z.string().email(),
@@ -18,11 +19,18 @@ const LOCKOUT_MINUTES = 15;
 
 export async function POST(request: Request) {
   const body = schema.parse(await request.json());
+  const email = body.email.trim().toLowerCase();
+  const clientIp = getClientIp(request);
 
   try {
     await enforceRateLimit({
-      key: `password:${body.email}`,
+      key: `password:email:${email}`,
       limit: 10,
+      windowSeconds: 60 * 5,
+    });
+    await enforceRateLimit({
+      key: `password:ip:${clientIp}`,
+      limit: 30,
       windowSeconds: 60 * 5,
     });
   } catch (error) {
@@ -36,7 +44,7 @@ export async function POST(request: Request) {
   }
 
   const user = await prisma.user.findFirst({
-    where: { email: body.email },
+    where: { email },
     __allowMissingTenant: true,
   } as Prisma.UserFindFirstArgs & { __allowMissingTenant?: boolean });
 

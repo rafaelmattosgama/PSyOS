@@ -11,6 +11,17 @@ const schema = z.object({
 });
 
 const MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_AUDIO_MIME_TYPES = new Set([
+  "audio/webm",
+  "audio/webm;codecs=opus",
+  "audio/ogg",
+  "audio/ogg;codecs=opus",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/mp4",
+  "audio/wav",
+  "audio/x-wav",
+]);
 
 export async function POST(request: Request) {
   const { user } = await requireAuth();
@@ -30,6 +41,10 @@ export async function POST(request: Request) {
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "Audio too large" }, { status: 400 });
+  }
+  const normalizedMime = file.type.trim().toLowerCase();
+  if (!normalizedMime || !ALLOWED_AUDIO_MIME_TYPES.has(normalizedMime)) {
+    return NextResponse.json({ error: "Unsupported audio format" }, { status: 400 });
   }
 
   if (tenantId !== user.tenantId) {
@@ -60,7 +75,7 @@ export async function POST(request: Request) {
       attachmentCiphertext: encryptedAudio.ciphertext,
       attachmentIv: encryptedAudio.iv,
       attachmentAuthTag: encryptedAudio.authTag,
-      attachmentMime: file.type || "audio/mpeg",
+      attachmentMime: normalizedMime,
       attachmentSize: file.size,
     },
   });

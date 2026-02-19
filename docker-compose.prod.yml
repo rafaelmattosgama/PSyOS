@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   app:
     build:
@@ -12,12 +10,16 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://psyos:psyos@postgres:5432/psyos
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   worker:
     build:
@@ -28,13 +30,17 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://psyos:psyos@postgres:5432/psyos
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     command: pnpm worker
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   postgres:
     image: postgres:16-alpine
@@ -43,8 +49,8 @@ services:
       POSTGRES_USER: psyos
       POSTGRES_PASSWORD: psyos
       POSTGRES_DB: psyos
-    ports:
-      - "5433:5432"
+    expose:
+      - "5432"
     volumes:
       - psyos_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -52,14 +58,39 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     container_name: psyos-redis
-    ports:
-      - "6380:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - >
+        exec redis-server
+        --appendonly yes
+        --save 60 1000
+        --protected-mode yes
+        --requirepass "$$REDIS_PASSWORD"
+        --rename-command FLUSHALL ""
+        --rename-command FLUSHDB ""
+        --rename-command CONFIG ""
+        --rename-command REPLICAOF ""
+        --rename-command SLAVEOF ""
+    expose:
+      - "6379"
     volumes:
       - psyos_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   psyos_postgres_data:

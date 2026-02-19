@@ -13,7 +13,7 @@ import { getAiQueue } from "@/lib/queues";
 const schema = z.object({
   tenantId: z.string().min(1),
   conversationId: z.string().min(1),
-  content: z.string().min(1),
+  content: z.string().trim().min(1).max(4000),
 });
 
 export async function POST(request: Request) {

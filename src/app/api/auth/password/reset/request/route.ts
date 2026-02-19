@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
+import { enforceRateLimit, RateLimitExceededError } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request";
 import crypto from "crypto";
 
 const schema = z.object({
@@ -21,8 +23,32 @@ function getBaseUrl(request: Request) {
 
 export async function POST(request: Request) {
   const body = schema.parse(await request.json());
+  const email = body.email.trim().toLowerCase();
+  const clientIp = getClientIp(request);
+
+  try {
+    await enforceRateLimit({
+      key: `password-reset:email:${email}`,
+      limit: 3,
+      windowSeconds: 60 * 15,
+    });
+    await enforceRateLimit({
+      key: `password-reset:ip:${clientIp}`,
+      limit: 20,
+      windowSeconds: 60 * 15,
+    });
+  } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: "Too many requests. Try again in a few minutes." },
+        { status: 429 },
+      );
+    }
+    throw error;
+  }
+
   const user = await prisma.user.findFirst({
-    where: { email: body.email },
+    where: { email },
     __allowMissingTenant: true,
   } as Prisma.UserFindFirstArgs & { __allowMissingTenant?: boolean });
 
@@ -47,10 +73,10 @@ export async function POST(request: Request) {
   const baseUrl = getBaseUrl(request);
   const link = `${baseUrl}/login?reset=${encodeURIComponent(
     token,
-  )}&email=${encodeURIComponent(body.email)}`;
+  )}&email=${encodeURIComponent(email)}`;
 
   await sendEmail({
-    to: body.email,
+    to: email,
     subject: "PsyOS - Redefinir senha",
     text: `Use o link para redefinir sua senha: ${link}`,
   });

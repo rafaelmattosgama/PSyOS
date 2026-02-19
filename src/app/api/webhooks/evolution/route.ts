@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import crypto from "crypto";
 import { getInboundQueue } from "@/lib/queues";
 import { prisma } from "@/lib/prisma";
 
@@ -37,7 +38,43 @@ function extractFrom(payload: Record<string, unknown>) {
   return raw.replace(/[^\d]/g, "");
 }
 
+function getProvidedSecret(request: Request) {
+  const direct =
+    request.headers.get("x-webhook-secret") ??
+    request.headers.get("x-evolution-secret");
+  if (direct) {
+    return direct;
+  }
+  const auth = request.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    return auth.slice("Bearer ".length).trim();
+  }
+  return "";
+}
+
+function isWebhookAuthorized(request: Request) {
+  const configuredSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+  if (!configuredSecret) {
+    return process.env.NODE_ENV !== "production";
+  }
+  const providedSecret = getProvidedSecret(request);
+  if (!providedSecret) {
+    return false;
+  }
+
+  const expected = Buffer.from(configuredSecret, "utf8");
+  const provided = Buffer.from(providedSecret, "utf8");
+  return (
+    expected.length === provided.length &&
+    crypto.timingSafeEqual(expected, provided)
+  );
+}
+
 export async function POST(request: Request) {
+  if (!isWebhookAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const tenantId = request.headers.get("x-tenant-id") ?? "";
   if (!tenantId) {
     return NextResponse.json({ error: "Missing tenant" }, { status: 400 });
@@ -45,7 +82,7 @@ export async function POST(request: Request) {
 
   const raw = payloadSchema.parse(await request.json());
   const messageId = extractMessageId(raw);
-  const text = extractText(raw);
+  const text = extractText(raw).trim().slice(0, 4000);
   const from = extractFrom(raw);
 
   if (!messageId || !text || !from) {

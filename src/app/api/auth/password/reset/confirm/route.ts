@@ -15,6 +15,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const body = schema.parse(await request.json());
+  const email = body.email.trim().toLowerCase();
 
   if (body.password !== body.confirmPassword) {
     return NextResponse.json({ error: "Passwords do not match" }, { status: 400 });
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   }
 
   const user = await prisma.user.findFirst({
-    where: { email: body.email },
+    where: { email },
     __allowMissingTenant: true,
   } as Prisma.UserFindFirstArgs & { __allowMissingTenant?: boolean });
 

@@ -7,6 +7,52 @@ export class RateLimitExceededError extends Error {
   }
 }
 
+type InMemoryRateLimitEntry = {
+  count: number;
+  expiresAt: number;
+};
+
+const globalForRateLimit = globalThis as unknown as {
+  inMemoryRateLimit?: Map<string, InMemoryRateLimitEntry>;
+};
+
+function getInMemoryRateLimitStore() {
+  if (!globalForRateLimit.inMemoryRateLimit) {
+    globalForRateLimit.inMemoryRateLimit = new Map<string, InMemoryRateLimitEntry>();
+  }
+  return globalForRateLimit.inMemoryRateLimit;
+}
+
+function enforceInMemoryRateLimit(params: {
+  key: string;
+  limit: number;
+  windowSeconds: number;
+}) {
+  const store = getInMemoryRateLimitStore();
+  const now = Date.now();
+  const ttl = params.windowSeconds * 1000;
+
+  // Opportunistic cleanup to avoid unbounded growth.
+  if (store.size > 5000) {
+    for (const [entryKey, entry] of store.entries()) {
+      if (entry.expiresAt <= now) {
+        store.delete(entryKey);
+      }
+    }
+  }
+
+  const entry = store.get(params.key);
+  if (!entry || entry.expiresAt <= now) {
+    store.set(params.key, { count: 1, expiresAt: now + ttl });
+    return;
+  }
+
+  entry.count += 1;
+  if (entry.count > params.limit) {
+    throw new RateLimitExceededError();
+  }
+}
+
 export async function enforceRateLimit(params: {
   key: string;
   limit: number;
@@ -22,11 +68,12 @@ export async function enforceRateLimit(params: {
       await redis.expire(key, windowSeconds);
     }
   } catch (error) {
-    // Fail-open when Redis is temporarily unavailable so auth does not break.
+    // Fall back to process-memory limit when Redis is temporarily unavailable.
     console.error(
-      "[rate-limit] Redis error, skipping rate-limit:",
+      "[rate-limit] Redis error, falling back to in-memory limit:",
       (error as Error).message,
     );
+    enforceInMemoryRateLimit(params);
     return;
   }
 
