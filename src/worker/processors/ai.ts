@@ -107,6 +107,7 @@ function buildUnavailableReply(language: keyof typeof WORKER_COPY) {
 }
 
 export async function processAi(job: AiJob) {
+  const startedAt = Date.now();
   console.log("[ai] process start", {
     conversationId: job.conversationId,
     tenantId: job.tenantId,
@@ -120,6 +121,63 @@ export async function processAi(job: AiJob) {
   if (!conversation || !conversation.aiEnabled) {
     console.log("[ai] skipped: no conversation or AI disabled");
     return;
+  }
+
+  if (job.triggerMessageId) {
+    const [triggerMessage, latestPatientMessage, latestAiMessage] = await Promise.all([
+      prisma.message.findFirst({
+        where: {
+          tenantId: job.tenantId,
+          conversationId: conversation.id,
+          id: job.triggerMessageId,
+        },
+        select: { id: true, createdAt: true, authorType: true },
+      }),
+      prisma.message.findFirst({
+        where: {
+          tenantId: job.tenantId,
+          conversationId: conversation.id,
+          authorType: "PATIENT",
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { id: true, createdAt: true },
+      }),
+      prisma.message.findFirst({
+        where: {
+          tenantId: job.tenantId,
+          conversationId: conversation.id,
+          authorType: "AI",
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { id: true, createdAt: true },
+      }),
+    ]);
+
+    if (!triggerMessage || triggerMessage.authorType !== "PATIENT") {
+      console.log("[ai] skipped stale job", {
+        reason: "missing_or_invalid_trigger_message",
+        triggerMessageId: job.triggerMessageId,
+      });
+      return;
+    }
+
+    if (latestPatientMessage && latestPatientMessage.id !== triggerMessage.id) {
+      console.log("[ai] skipped stale job", {
+        reason: "not_latest_patient_message",
+        triggerMessageId: triggerMessage.id,
+        latestPatientMessageId: latestPatientMessage.id,
+      });
+      return;
+    }
+
+    if (latestAiMessage && latestAiMessage.createdAt > triggerMessage.createdAt) {
+      console.log("[ai] skipped stale job", {
+        reason: "already_replied_after_trigger",
+        triggerMessageId: triggerMessage.id,
+        latestAiMessageId: latestAiMessage.id,
+      });
+      return;
+    }
   }
 
   const dek = decryptDek(conversation.encryptedDek, getMasterKek());
@@ -248,6 +306,7 @@ export async function processAi(job: AiJob) {
     closeEpisode = true;
   } else {
     try {
+      const openAiStartedAt = Date.now();
       console.log("[ai] calling OpenAI", {
         model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
         maxTokens,
@@ -259,7 +318,9 @@ export async function processAi(job: AiJob) {
         maxTokens,
         temperature,
       });
-      console.log("[ai] OpenAI reply length", reply?.length ?? 0);
+      console.log("[ai] OpenAI reply length", reply?.length ?? 0, {
+        elapsedMs: Date.now() - openAiStartedAt,
+      });
     } catch (error) {
       console.error("[ai] OpenAI error:", (error as Error).message);
       console.error("[ai] OpenAI error stack:", (error as Error).stack ?? "no stack");
@@ -319,5 +380,10 @@ export async function processAi(job: AiJob) {
       },
       triggeredAt: new Date().toISOString(),
     },
+  });
+
+  console.log("[ai] process done", {
+    conversationId: conversation.id,
+    elapsedMs: Date.now() - startedAt,
   });
 }

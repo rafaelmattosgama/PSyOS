@@ -8,6 +8,10 @@ export function getInboundQueue() {
   if (!inboundQueue) {
     inboundQueue = new Queue("inbound_message_process", {
       connection: getRedisConnectionOptions(),
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 2000 },
+      },
     });
   }
   return inboundQueue;
@@ -17,6 +21,10 @@ export function getAiQueue() {
   if (!aiQueue) {
     aiQueue = new Queue("ai_reply_generate", {
       connection: getRedisConnectionOptions(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 2000 },
+      },
     });
   }
   return aiQueue;

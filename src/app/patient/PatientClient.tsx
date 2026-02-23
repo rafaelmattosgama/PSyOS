@@ -274,6 +274,9 @@ export default function PatientClient({ tenantId }: Props) {
   const recordTimerRef = useRef<number | null>(null);
   const [pendingAudioUrl, setPendingAudioUrl] = useState<string | null>(null);
   const [pendingAudioBlob, setPendingAudioBlob] = useState<Blob | null>(null);
+  const [expandedTranscripts, setExpandedTranscripts] = useState<
+    Record<string, boolean>
+  >({});
   const MAX_RECORD_SECONDS = 120;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -326,12 +329,20 @@ export default function PatientClient({ tenantId }: Props) {
     return new Date(lastAi.createdAt).getTime() < new Date(lastPatient.createdAt).getTime();
   }, [messages, selectedConversation?.aiEnabled]);
 
+  const toggleTranscript = (messageId: string) => {
+    setExpandedTranscripts((current) => ({
+      ...current,
+      [messageId]: !current[messageId],
+    }));
+  };
+
   useEffect(() => {
     typingDoneRef.current = new Set();
     typingInitializedRef.current = false;
     setTypingId(null);
     setTypingText("");
     setTypingIndex(0);
+    setExpandedTranscripts({});
   }, [selectedId]);
 
   useEffect(() => {
@@ -871,6 +882,14 @@ export default function PatientClient({ tenantId }: Props) {
                   !previous ||
                   new Date(previous.createdAt).toDateString() !==
                     new Date(message.createdAt).toDateString();
+                const renderedContent =
+                  message.authorType === "AI" && typingId === message.id
+                    ? message.content.slice(0, typingIndex)
+                    : message.content;
+                const hasAudioTranscript = Boolean(
+                  message.hasAttachment && !message.deletedAt && renderedContent.trim(),
+                );
+                const transcriptExpanded = Boolean(expandedTranscripts[message.id]);
                 return (
                   <div key={message.id} className="space-y-3">
                     {showDayLabel ? (
@@ -935,19 +954,43 @@ export default function PatientClient({ tenantId }: Props) {
                         <div className={message.authorType !== "PATIENT" ? "mt-2" : ""}>
                           {message.deletedAt ? (
                             <p className="italic opacity-70">{t.messageDeleted}</p>
-                          ) : (
-                            renderFormattedContent(
-                              message.authorType === "AI" && typingId === message.id
-                                ? message.content.slice(0, typingIndex)
-                                : message.content,
-                            )
-                          )}
+                          ) : !message.hasAttachment ? (
+                            renderFormattedContent(renderedContent)
+                          ) : null}
                         </div>
                         {message.hasAttachment && !message.deletedAt ? (
-                          <div className="mt-3">
+                          <div className="mt-3 space-y-2">
                             <AudioMessage
                               src={`/api/messages/attachment?messageId=${message.id}`}
                             />
+                            {hasAudioTranscript ? (
+                              <div className="mt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTranscript(message.id)}
+                                  className={`text-[11px] underline underline-offset-2 transition-colors ${
+                                    message.authorType === "PATIENT"
+                                      ? "text-white/85 hover:text-white"
+                                      : "text-[color:var(--ink-600)] hover:text-[color:var(--ink-800)]"
+                                  }`}
+                                >
+                                  {transcriptExpanded
+                                    ? t.audioTranscriptHide
+                                    : t.audioTranscriptShow}
+                                </button>
+                                {transcriptExpanded ? (
+                                  <div
+                                    className={`mt-1 text-xs ${
+                                      message.authorType === "PATIENT"
+                                        ? "text-white/90"
+                                        : "text-[color:var(--ink-700)]"
+                                    }`}
+                                  >
+                                    {renderFormattedContent(renderedContent)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div className="mt-2 text-[10px] text-right text-[color:var(--ink-500)]">

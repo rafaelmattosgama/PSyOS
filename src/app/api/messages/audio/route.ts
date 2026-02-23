@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireConversationAccess, requireRole } from "@/lib/auth/guards";
 import { decryptDek, encryptBytes, encryptMessage, getMasterKek } from "@/lib/crypto";
 import { logAuditEvent } from "@/lib/audit";
+import { transcribeAudio } from "@/lib/ai/openai";
+import { getAiQueue } from "@/lib/queues";
 
 const schema = z.object({
   tenantId: z.string().min(1),
@@ -13,15 +15,32 @@ const schema = z.object({
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_AUDIO_MIME_TYPES = new Set([
   "audio/webm",
-  "audio/webm;codecs=opus",
   "audio/ogg",
-  "audio/ogg;codecs=opus",
   "audio/mpeg",
   "audio/mp3",
   "audio/mp4",
   "audio/wav",
   "audio/x-wav",
 ]);
+
+function resolveAudioExtension(mime: string) {
+  switch (mime) {
+    case "audio/webm":
+      return "webm";
+    case "audio/ogg":
+      return "ogg";
+    case "audio/mpeg":
+    case "audio/mp3":
+      return "mp3";
+    case "audio/mp4":
+      return "m4a";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav";
+    default:
+      return "bin";
+  }
+}
 
 export async function POST(request: Request) {
   const { user } = await requireAuth();
@@ -43,7 +62,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Audio too large" }, { status: 400 });
   }
   const normalizedMime = file.type.trim().toLowerCase();
-  if (!normalizedMime || !ALLOWED_AUDIO_MIME_TYPES.has(normalizedMime)) {
+  const baseMime = normalizedMime.split(";")[0] ?? "";
+  if (!baseMime || !ALLOWED_AUDIO_MIME_TYPES.has(baseMime)) {
     return NextResponse.json({ error: "Unsupported audio format" }, { status: 400 });
   }
 
@@ -61,7 +81,22 @@ export async function POST(request: Request) {
   const dek = decryptDek(conversation.encryptedDek, getMasterKek());
   const buffer = Buffer.from(await file.arrayBuffer());
   const encryptedAudio = encryptBytes(buffer, dek);
-  const encryptedText = encryptMessage("", dek);
+  const transcriptionFile = new File(
+    [buffer],
+    `audio.${resolveAudioExtension(baseMime)}`,
+    { type: baseMime },
+  );
+
+  let transcriptionText = "";
+  try {
+    transcriptionText = await transcribeAudio({
+      file: transcriptionFile,
+    });
+  } catch (error) {
+    console.error("[audio] transcription failed:", (error as Error).message);
+  }
+
+  const encryptedText = encryptMessage(transcriptionText, dek);
 
   const message = await prisma.message.create({
     data: {
@@ -75,10 +110,18 @@ export async function POST(request: Request) {
       attachmentCiphertext: encryptedAudio.ciphertext,
       attachmentIv: encryptedAudio.iv,
       attachmentAuthTag: encryptedAudio.authTag,
-      attachmentMime: normalizedMime,
+      attachmentMime: baseMime,
       attachmentSize: file.size,
     },
   });
+
+  if (user.role === "PATIENT" && conversation.aiEnabled) {
+    await getAiQueue().add("ai_reply_generate", {
+      tenantId: user.tenantId,
+      conversationId: conversation.id,
+      triggerMessageId: message.id,
+    });
+  }
 
   await logAuditEvent({
     tenantId: user.tenantId,
@@ -86,6 +129,7 @@ export async function POST(request: Request) {
     action: "message.audio",
     targetType: "Message",
     targetId: message.id,
+    meta: { transcribed: Boolean(transcriptionText) },
   });
 
   return NextResponse.json({ ok: true, messageId: message.id });
