@@ -4,6 +4,22 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireConversationAccess, requireStepUp } from "@/lib/auth/guards";
 import { decryptDek, decryptMessage, getMasterKek } from "@/lib/crypto";
 import { logAuditEvent } from "@/lib/audit";
+import { uiSpecSchema } from "@/lib/ai/flow";
+
+const prismaAny = prisma as typeof prisma & {
+  aiFlowStep: {
+    findMany: (args: unknown) => Promise<
+      Array<{
+        id: string;
+        flowSessionId: string;
+        messageId: string;
+        state: "PENDING" | "ANSWERED" | "EXPIRED" | "DISMISSED";
+        uiSpecJson: unknown;
+        expiresAt: Date | null;
+      }>
+    >;
+  };
+};
 
 const querySchema = z.object({
   conversationId: z.string().min(1),
@@ -39,12 +55,58 @@ export async function GET(request: Request) {
     orderBy: { createdAt: "desc" },
     take: query.limit ?? 50,
   });
+  const messageIds = messages.map((message) => message.id);
+  const flowSteps =
+    messageIds.length > 0
+      ? await prismaAny.aiFlowStep.findMany({
+          where: {
+            tenantId: user.tenantId,
+            messageId: { in: messageIds },
+          },
+          select: {
+            id: true,
+            flowSessionId: true,
+            messageId: true,
+            state: true,
+            uiSpecJson: true,
+            expiresAt: true,
+          },
+        })
+      : [];
+  const flowStepByMessageId = new Map(
+    flowSteps.map((step) => [step.messageId, step]),
+  );
 
   const dek = decryptDek(conversation.encryptedDek, getMasterKek());
+  const now = Date.now();
   const items = messages
     .slice()
     .reverse()
     .map((message) => ({
+      ...(function () {
+        const step = flowStepByMessageId.get(message.id);
+        if (!step) {
+          return {};
+        }
+        if (step.state !== "PENDING") {
+          return {};
+        }
+        if (step.expiresAt && step.expiresAt.getTime() < now) {
+          return {};
+        }
+        const parsedUi = uiSpecSchema.safeParse(step.uiSpecJson);
+        if (!parsedUi.success) {
+          return {};
+        }
+        return {
+          interactive: {
+            flowId: step.flowSessionId,
+            stepId: step.id,
+            state: step.state,
+            uiSpec: parsedUi.data,
+          },
+        };
+      })(),
       id: message.id,
       direction: message.direction,
       authorType: message.authorType,

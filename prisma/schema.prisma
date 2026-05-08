@@ -37,6 +37,26 @@ enum Language {
   EN
 }
 
+enum AiFlowStatus {
+  IDLE
+  ACTIVE
+  COMPLETED
+  ABORTED
+}
+
+enum AiFlowStepState {
+  PENDING
+  ANSWERED
+  EXPIRED
+  DISMISSED
+}
+
+enum AiEventStatus {
+  OPEN
+  CLOSED
+  ABORTED
+}
+
 model Tenant {
   id        String   @id @default(cuid())
   name      String
@@ -54,38 +74,43 @@ model Tenant {
   sessions        Session[]
   accessGrants    ConversationAccessGrant[]
   weeklySummaries WeeklySummary[]
+  aiFlowSessions  AiFlowSession[]
+  aiFlowSteps     AiFlowStep[]
+  aiEventSessions AiEventSession[]
 }
 
 model User {
-  id                   String   @id @default(cuid())
-  tenantId             String
-  role                 Role
-  email                String?
-  phone                String?
-  passwordHash         String?
-  webauthnEnabled      Boolean  @default(false)
-  failedLoginAttempts  Int      @default(0)
-  lockedUntil          DateTime?
-  adminMessageAccess   Boolean  @default(false)
-  isSystemAdmin        Boolean  @default(false)
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  tenantId            String
+  role                Role
+  email               String?
+  phone               String?
+  passwordHash        String?
+  webauthnEnabled     Boolean   @default(false)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  adminMessageAccess  Boolean   @default(false)
+  isSystemAdmin       Boolean   @default(false)
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  tenant               Tenant   @relation(fields: [tenantId], references: [id])
-  psychologistProfile  PsychologistProfile?
-  patientProfile       PatientProfile?
-  sessions             Session[]
-  webauthnCredentials  WebAuthnCredential[]
-  mfaChallenges        MfaChallenge[]
-  auditLogs            AuditLog[] @relation("AuditActor")
-  conversationsAsPsychologist Conversation[] @relation("ConversationPsychologist")
-  conversationsAsPatient      Conversation[] @relation("ConversationPatient")
-  accessGrants         ConversationAccessGrant[] @relation("AccessGrantUser")
-  grantsIssued         ConversationAccessGrant[] @relation("AccessGrantBy")
-  aiPoliciesOwned      AiPolicy[] @relation("AiPolicyOwner")
-  recordsCreated       Record[] @relation("RecordCreator")
-  messagesDeleted      Message[] @relation("MessageDeletedBy")
+  tenant                      Tenant                    @relation(fields: [tenantId], references: [id])
+  psychologistProfile         PsychologistProfile?
+  patientProfile              PatientProfile?
+  sessions                    Session[]
+  webauthnCredentials         WebAuthnCredential[]
+  mfaChallenges               MfaChallenge[]
+  auditLogs                   AuditLog[]                @relation("AuditActor")
+  conversationsAsPsychologist Conversation[]            @relation("ConversationPsychologist")
+  conversationsAsPatient      Conversation[]            @relation("ConversationPatient")
+  accessGrants                ConversationAccessGrant[] @relation("AccessGrantUser")
+  grantsIssued                ConversationAccessGrant[] @relation("AccessGrantBy")
+  aiPoliciesOwned             AiPolicy[]                @relation("AiPolicyOwner")
+  recordsCreated              Record[]                  @relation("RecordCreator")
+  messagesDeleted             Message[]                 @relation("MessageDeletedBy")
+  aiFlowSessions              AiFlowSession[]           @relation("AiFlowPatient")
+  aiEventSessions             AiEventSession[]          @relation("AiEventPatient")
 
   @@unique([tenantId, email])
   @@unique([tenantId, phone])
@@ -94,7 +119,7 @@ model User {
 }
 
 model PsychologistProfile {
-  userId      String @id
+  userId      String   @id
   displayName String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -103,12 +128,12 @@ model PsychologistProfile {
 }
 
 model PatientProfile {
-  userId      String @id
-  displayName String
-  phoneE164   String
+  userId            String   @id
+  displayName       String
+  phoneE164         String
   preferredLanguage Language @default(ES)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -125,15 +150,18 @@ model Conversation {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  tenant       Tenant @relation(fields: [tenantId], references: [id])
-  psychologist User   @relation("ConversationPsychologist", fields: [psychologistUserId], references: [id])
-  patient      User   @relation("ConversationPatient", fields: [patientUserId], references: [id])
-  messages     Message[]
-  aiPolicies   AiPolicy[]
-  aiEpisodes   AiEpisode[]
-  records      Record[]
-  accessGrants ConversationAccessGrant[]
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id])
+  psychologist    User                      @relation("ConversationPsychologist", fields: [psychologistUserId], references: [id])
+  patient         User                      @relation("ConversationPatient", fields: [patientUserId], references: [id])
+  messages        Message[]
+  aiPolicies      AiPolicy[]
+  aiEpisodes      AiEpisode[]
+  records         Record[]
+  accessGrants    ConversationAccessGrant[]
   weeklySummaries WeeklySummary[]
+  aiFlowSessions  AiFlowSession[]
+  aiFlowSteps     AiFlowStep[]
+  aiEventSessions AiEventSession[]
 
   @@index([tenantId])
   @@index([psychologistUserId])
@@ -141,42 +169,43 @@ model Conversation {
 }
 
 model Message {
-  id                String             @id @default(cuid())
-  tenantId          String
-  conversationId    String
-  direction         MessageDirection
-  authorType        MessageAuthorType
-  ciphertext        String
-  iv                String
-  authTag           String
-  deletedAt         DateTime?
-  deletedByUserId   String?
+  id                   String            @id @default(cuid())
+  tenantId             String
+  conversationId       String
+  direction            MessageDirection
+  authorType           MessageAuthorType
+  ciphertext           String
+  iv                   String
+  authTag              String
+  deletedAt            DateTime?
+  deletedByUserId      String?
   attachmentCiphertext String?
   attachmentIv         String?
   attachmentAuthTag    String?
   attachmentMime       String?
   attachmentSize       Int?
-  externalMessageId String?
-  createdAt         DateTime @default(now())
+  externalMessageId    String?
+  createdAt            DateTime          @default(now())
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])
   deletedBy    User?        @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id])
+  flowStep     AiFlowStep?  @relation("FlowStepMessage")
 
+  @@unique([tenantId, externalMessageId])
   @@index([tenantId])
   @@index([conversationId, createdAt])
   @@index([externalMessageId])
-  @@unique([tenantId, externalMessageId])
 }
 
 model AiPolicy {
-  id            String   @id @default(cuid())
-  tenantId      String
-  ownerUserId   String?
+  id             String   @id @default(cuid())
+  tenantId       String
+  ownerUserId    String?
   conversationId String?
-  policyText    String
-  flagsJson     Json?
-  updatedAt     DateTime @updatedAt
+  policyText     String
+  flagsJson      Json?
+  updatedAt      DateTime @updatedAt
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   owner        User?         @relation("AiPolicyOwner", fields: [ownerUserId], references: [id])
@@ -203,12 +232,12 @@ model AiEpisode {
 }
 
 model Record {
-  id               String   @id @default(cuid())
-  tenantId         String
-  conversationId   String
-  createdByUserId  String
-  dataJson         Json
-  createdAt        DateTime @default(now())
+  id              String   @id @default(cuid())
+  tenantId        String
+  conversationId  String
+  createdByUserId String
+  dataJson        Json
+  createdAt       DateTime @default(now())
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])
@@ -234,6 +263,86 @@ model WeeklySummary {
   @@unique([conversationId, weekStart])
   @@index([tenantId])
   @@index([conversationId])
+}
+
+model AiFlowSession {
+  id             String       @id @default(cuid())
+  tenantId       String
+  conversationId String
+  patientUserId  String
+  status         AiFlowStatus @default(IDLE)
+  stepCount      Int          @default(0)
+  maxSteps       Int          @default(3)
+  ignoredUiCount Int          @default(0)
+  burdenScore    Float        @default(0)
+  lastTarget     String?
+  targetsJson    Json?
+  confidenceJson Json?
+  cooldownUntil  DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  patient      User         @relation("AiFlowPatient", fields: [patientUserId], references: [id])
+  steps        AiFlowStep[]
+  eventSession AiEventSession?
+
+  @@index([tenantId])
+  @@index([conversationId, status])
+  @@index([patientUserId])
+  @@index([updatedAt])
+}
+
+model AiEventSession {
+  id             String        @id @default(cuid())
+  tenantId       String
+  conversationId String
+  patientUserId  String
+  flowSessionId  String?       @unique
+  status         AiEventStatus @default(OPEN)
+  closeReason    String?
+  summaryJson    Json?
+  adherenceJson  Json?
+  startedAt      DateTime      @default(now())
+  closedAt       DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id])
+  conversation Conversation   @relation(fields: [conversationId], references: [id])
+  patient      User           @relation("AiEventPatient", fields: [patientUserId], references: [id])
+  flowSession  AiFlowSession? @relation(fields: [flowSessionId], references: [id])
+
+  @@index([tenantId])
+  @@index([conversationId, status])
+  @@index([patientUserId])
+  @@index([updatedAt])
+}
+
+model AiFlowStep {
+  id             String          @id @default(cuid())
+  tenantId       String
+  conversationId String
+  flowSessionId  String
+  messageId      String
+  state          AiFlowStepState @default(PENDING)
+  uiSpecJson     Json
+  answerJson     Json?
+  expiresAt      DateTime?
+  answeredAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  conversation Conversation  @relation(fields: [conversationId], references: [id])
+  flowSession  AiFlowSession @relation(fields: [flowSessionId], references: [id])
+  message      Message       @relation("FlowStepMessage", fields: [messageId], references: [id])
+
+  @@unique([messageId])
+  @@index([tenantId])
+  @@index([conversationId, state])
+  @@index([flowSessionId, state])
 }
 
 model AuditLog {
@@ -270,34 +379,34 @@ model MfaChallenge {
 }
 
 model WebAuthnCredential {
-  id            String   @id @default(cuid())
-  tenantId      String
-  userId        String
-  credentialId  String
-  publicKey     String
-  counter       Int
+  id             String   @id @default(cuid())
+  tenantId       String
+  userId         String
+  credentialId   String
+  publicKey      String
+  counter        Int
   transportsJson Json?
-  createdAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
 
+  @@unique([credentialId])
   @@index([tenantId])
   @@index([userId])
-  @@unique([credentialId])
 }
 
 model Session {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   tenantId    String
   userId      String
-  token       String   @unique
+  token       String    @unique
   expiresAt   DateTime
   lastSeenAt  DateTime
   stepUpUntil DateTime?
   ip          String?
   userAgent   String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
@@ -307,13 +416,13 @@ model Session {
 }
 
 model ConversationAccessGrant {
-  id               String   @id @default(cuid())
-  tenantId         String
-  conversationId   String
-  userId           String
-  grantedByUserId  String
-  expiresAt        DateTime?
-  createdAt        DateTime @default(now())
+  id              String    @id @default(cuid())
+  tenantId        String
+  conversationId  String
+  userId          String
+  grantedByUserId String
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])

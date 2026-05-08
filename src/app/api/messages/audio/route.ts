@@ -23,6 +23,30 @@ const ALLOWED_AUDIO_MIME_TYPES = new Set([
   "audio/x-wav",
 ]);
 
+const prismaAny = prisma as typeof prisma & {
+  aiFlowStep: {
+    findFirst: (args: unknown) => Promise<
+      | {
+          id: string;
+          flowSessionId: string;
+          flowSession: {
+            burdenScore: number;
+            ignoredUiCount: number;
+          };
+        }
+      | null
+    >;
+    updateMany: (args: unknown) => Promise<unknown>;
+  };
+  aiFlowSession: {
+    updateMany: (args: unknown) => Promise<unknown>;
+  };
+  aiEventSession: {
+    findFirst: (args: unknown) => Promise<{ id: string } | null>;
+    create: (args: unknown) => Promise<{ id: string }>;
+  };
+};
+
 function resolveAudioExtension(mime: string) {
   switch (mime) {
     case "audio/webm":
@@ -97,6 +121,48 @@ export async function POST(request: Request) {
   }
 
   const encryptedText = encryptMessage(transcriptionText, dek);
+  if (user.role === "PATIENT") {
+    const pendingFlowStep = await prismaAny.aiFlowStep.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        conversationId: conversation.id,
+        state: "PENDING",
+      },
+      orderBy: { createdAt: "desc" },
+      include: { flowSession: true },
+    });
+    if (pendingFlowStep) {
+      const now = new Date();
+      const burdenScore = Math.min(1, pendingFlowStep.flowSession.burdenScore + 0.2);
+      await prismaAny.aiFlowStep.updateMany({
+        where: {
+          id: pendingFlowStep.id,
+          tenantId: user.tenantId,
+          state: "PENDING",
+        },
+        data: {
+          state: "DISMISSED",
+          answeredAt: now,
+          answerJson: {
+            label: transcriptionText || "[audio]",
+            freeText: true,
+            source: "audio",
+            timestamp: now.toISOString(),
+          },
+        },
+      });
+      await prismaAny.aiFlowSession.updateMany({
+        where: {
+          id: pendingFlowStep.flowSessionId,
+          tenantId: user.tenantId,
+        },
+        data: {
+          burdenScore,
+          ignoredUiCount: pendingFlowStep.flowSession.ignoredUiCount + 1,
+        },
+      });
+    }
+  }
 
   const message = await prisma.message.create({
     data: {
@@ -114,6 +180,27 @@ export async function POST(request: Request) {
       attachmentSize: file.size,
     },
   });
+
+  if (user.role === "PATIENT") {
+    const openEvent = await prismaAny.aiEventSession.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        conversationId: conversation.id,
+        status: "OPEN",
+      },
+      select: { id: true },
+    });
+    if (!openEvent) {
+      await prismaAny.aiEventSession.create({
+        data: {
+          tenantId: user.tenantId,
+          conversationId: conversation.id,
+          patientUserId: conversation.patientUserId,
+          status: "OPEN",
+        },
+      });
+    }
+  }
 
   if (user.role === "PATIENT" && conversation.aiEnabled) {
     await getAiQueue().add("ai_reply_generate", {

@@ -29,11 +29,44 @@ type MessageItem = {
   deletedAt?: string | null;
   hasAttachment?: boolean;
   attachmentMime?: string | null;
+  interactive?: {
+    flowId: string;
+    stepId: string;
+    state: "PENDING";
+    uiSpec: {
+      component: "choice_buttons" | "yes_no";
+      prompt: string;
+      multiple?: boolean;
+      allow_free_text?: boolean;
+      options: Array<{
+        id: string;
+        label: string;
+        value: string | number | boolean;
+      }>;
+    };
+  };
+};
+
+type EventFlowItem = {
+  eventId: string | null;
+  eventStatus: "OPEN" | "CLOSED" | "ABORTED" | null;
+  eventStartedAt: string | null;
+  flowId: string | null;
+  status: "ACTIVE" | "IDLE" | "COMPLETED" | "ABORTED" | "OPEN" | "CLOSED" | null;
+  stepCount: number;
+  maxSteps: number;
+  pendingSteps: number;
 };
 
 type Props = {
   tenantId: string;
 };
+
+function isActiveFlowStatus(
+  status: EventFlowItem["status"],
+): status is "ACTIVE" | "OPEN" {
+  return status === "ACTIVE" || status === "OPEN";
+}
 
 const formatAudioTime = (value: number) => {
   if (!Number.isFinite(value) || value < 0) {
@@ -255,6 +288,8 @@ export default function PatientClient({ tenantId }: Props) {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [eventFlow, setEventFlow] = useState<EventFlowItem | null>(null);
+  const [closingEvent, setClosingEvent] = useState(false);
   const [typingId, setTypingId] = useState<string | null>(null);
   const [typingText, setTypingText] = useState("");
   const [typingIndex, setTypingIndex] = useState(0);
@@ -277,6 +312,9 @@ export default function PatientClient({ tenantId }: Props) {
   const [expandedTranscripts, setExpandedTranscripts] = useState<
     Record<string, boolean>
   >({});
+  const [structuredLoadingStepId, setStructuredLoadingStepId] = useState<string | null>(
+    null,
+  );
   const MAX_RECORD_SECONDS = 120;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -432,12 +470,26 @@ export default function PatientClient({ tenantId }: Props) {
     }
   };
 
+  const loadEventFlow = async (conversationId: string) => {
+    try {
+      const data = await getJson<{ item: EventFlowItem | null }>(
+        `/api/messages/event?conversationId=${conversationId}`,
+      );
+      setEventFlow(data.item ?? null);
+    } catch {
+      setEventFlow(null);
+    }
+  };
+
   const handleSelectConversation = async (conversationId: string) => {
     setSelectedId(conversationId);
     shouldAutoScrollRef.current = true;
     setShowScrollToBottom(false);
     setIsMobileMenuOpen(false);
-    await loadMessages(conversationId, { forceBottom: true });
+    await Promise.all([
+      loadMessages(conversationId, { forceBottom: true }),
+      loadEventFlow(conversationId),
+    ]);
   };
 
   const handleSendMessage = async () => {
@@ -465,7 +517,10 @@ export default function PatientClient({ tenantId }: Props) {
         content: trimmed,
       });
       setMessageDraft("");
-      await loadMessages(selectedId, { silent: true, forceBottom: true });
+      await Promise.all([
+        loadMessages(selectedId, { silent: true, forceBottom: true }),
+        loadEventFlow(selectedId),
+      ]);
     } catch (error) {
       setMessages(previousMessages);
       setStatus((error as Error).message);
@@ -501,6 +556,45 @@ export default function PatientClient({ tenantId }: Props) {
     }
   };
 
+  const handleStructuredResponse = async (
+    message: MessageItem,
+    option: { id: string; label: string; value: string | number | boolean },
+  ) => {
+    if (!selectedId || !message.interactive) {
+      return;
+    }
+    try {
+      setStructuredLoadingStepId(message.interactive.stepId);
+      const response = await fetch("/api/messages/structured-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          conversationId: selectedId,
+          flowId: message.interactive.flowId,
+          stepId: message.interactive.stepId,
+          selection: {
+            optionId: option.id,
+            label: option.label,
+            value: option.value,
+          },
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Request failed");
+      }
+      await Promise.all([
+        loadMessages(selectedId, { silent: true, forceBottom: true }),
+        loadEventFlow(selectedId),
+      ]);
+    } catch (error) {
+      setStatus((error as Error).message);
+    } finally {
+      setStructuredLoadingStepId(null);
+    }
+  };
+
   const sendAudioBlob = async (blob: Blob) => {
     if (!selectedId) {
       return;
@@ -519,7 +613,10 @@ export default function PatientClient({ tenantId }: Props) {
       if (!response.ok) {
         throw new Error(data.error ?? "Request failed");
       }
-      await loadMessages(selectedId, { forceBottom: true });
+      await Promise.all([
+        loadMessages(selectedId, { forceBottom: true }),
+        loadEventFlow(selectedId),
+      ]);
     } catch (error) {
       setStatus((error as Error).message);
     } finally {
@@ -635,7 +732,10 @@ export default function PatientClient({ tenantId }: Props) {
     if (selectedId) {
       shouldAutoScrollRef.current = true;
       setShowScrollToBottom(false);
-      loadMessages(selectedId, { forceBottom: true });
+      void Promise.all([
+        loadMessages(selectedId, { forceBottom: true }),
+        loadEventFlow(selectedId),
+      ]);
     }
   }, [selectedId]);
 
@@ -644,10 +744,46 @@ export default function PatientClient({ tenantId }: Props) {
       return;
     }
     const interval = setInterval(() => {
-      loadMessages(selectedId, { silent: true });
+      void Promise.all([
+        loadMessages(selectedId, { silent: true }),
+        loadEventFlow(selectedId),
+      ]);
     }, 5000);
     return () => clearInterval(interval);
   }, [selectedId]);
+
+  const hasClosableEvent = Boolean(
+    eventFlow &&
+      (eventFlow.eventStatus === "OPEN" ||
+        eventFlow.flowId ||
+        isActiveFlowStatus(eventFlow.status)),
+  );
+
+  const handleCloseEvent = async () => {
+    if (!selectedId || !hasClosableEvent) {
+      return;
+    }
+    try {
+      setClosingEvent(true);
+      setStatus(t.eventClosing);
+      await postJson<{ ok: boolean; closed: boolean; queuedAi: boolean }>(
+        "/api/messages/event",
+        {
+          tenantId,
+          conversationId: selectedId,
+        },
+      );
+      await Promise.all([
+        loadMessages(selectedId, { silent: true, forceBottom: true }),
+        loadEventFlow(selectedId),
+      ]);
+      setStatus(t.eventClosed);
+    } catch (error) {
+      setStatus((error as Error).message);
+    } finally {
+      setClosingEvent(false);
+    }
+  };
 
   useEffect(() => {
     const container = messageListRef.current;
@@ -843,6 +979,28 @@ export default function PatientClient({ tenantId }: Props) {
                       t.patientDefaultPsychologist
                     : t.patientNoConversation}
                 </h2>
+                {hasClosableEvent ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
+                      {t.eventFlowActive}
+                    </span>
+                    {(eventFlow?.maxSteps ?? 0) > 0 ? (
+                      <span className="text-[11px] text-[color:var(--ink-500)]">
+                        {t.eventFlowProgress}{" "}
+                        {Math.min(eventFlow?.stepCount ?? 0, eventFlow?.maxSteps ?? 0)}/
+                        {eventFlow?.maxSteps ?? 0}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleCloseEvent}
+                      disabled={closingEvent || loading}
+                      className="rounded-full border border-black/10 bg-white/90 px-3 py-1 text-[11px] font-semibold text-[color:var(--ink-900)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {t.eventCloseButton}
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-500)]">
                 <button
@@ -890,6 +1048,10 @@ export default function PatientClient({ tenantId }: Props) {
                   message.hasAttachment && !message.deletedAt && renderedContent.trim(),
                 );
                 const transcriptExpanded = Boolean(expandedTranscripts[message.id]);
+                const interactiveSpec =
+                  message.interactive?.state === "PENDING"
+                    ? message.interactive.uiSpec
+                    : null;
                 return (
                   <div key={message.id} className="space-y-3">
                     {showDayLabel ? (
@@ -991,6 +1153,28 @@ export default function PatientClient({ tenantId }: Props) {
                                 ) : null}
                               </div>
                             ) : null}
+                          </div>
+                        ) : null}
+                        {interactiveSpec &&
+                        message.authorType === "AI" &&
+                        !message.deletedAt ? (
+                          <div className="mt-3 space-y-2">
+                            <p className="text-xs text-[color:var(--ink-700)]">
+                              {interactiveSpec.prompt}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {interactiveSpec.options.map((option) => (
+                                <button
+                                  key={`${message.id}-${option.id}`}
+                                  type="button"
+                                  onClick={() => handleStructuredResponse(message, option)}
+                                  disabled={structuredLoadingStepId === message.interactive?.stepId}
+                                  className="rounded-full border border-black/10 bg-white/85 px-3 py-1 text-xs font-medium text-[color:var(--ink-900)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         ) : null}
                         <div className="mt-2 text-[10px] text-right text-[color:var(--ink-500)]">

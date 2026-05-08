@@ -1,4 +1,4 @@
-type ChatMessage = {
+export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
 };
@@ -197,6 +197,31 @@ export async function callOpenAi(params: {
     }
     throw new Error("OpenAI request failed");
   }
+}
+
+export async function callOpenAiOrchestrator(params: {
+  messages: ChatMessage[];
+  maxTokens?: number;
+  temperature?: number;
+}) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const model =
+    process.env.OPENAI_ORCHESTRATOR_MODEL?.trim() ||
+    process.env.OPENAI_FALLBACK_MODEL?.trim() ||
+    "gpt-4o-mini";
+
+  return requestChatCompletion({
+    apiKey,
+    model,
+    messages: params.messages,
+    maxTokens: params.maxTokens ?? 450,
+    temperature: params.temperature ?? 0.1,
+    includeResponseFormat: false,
+  });
 }
 
 export async function transcribeAudio(params: {

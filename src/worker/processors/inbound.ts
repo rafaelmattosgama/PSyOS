@@ -4,6 +4,13 @@ import { decryptDek, encryptMessage, getMasterKek } from "@/lib/crypto";
 import { getAiQueue } from "@/lib/queues";
 import { logAuditEvent } from "@/lib/audit";
 
+const prismaAny = prisma as typeof prisma & {
+  aiEventSession: {
+    findFirst: (args: unknown) => Promise<{ id: string } | null>;
+    create: (args: unknown) => Promise<{ id: string }>;
+  };
+};
+
 type InboundJob = {
   tenantId: string;
   externalMessageId?: string;
@@ -82,6 +89,25 @@ export async function processInbound(job: InboundJob) {
 
   if (!message) {
     return;
+  }
+
+  const openEvent = await prismaAny.aiEventSession.findFirst({
+    where: {
+      tenantId: job.tenantId,
+      conversationId: conversation.id,
+      status: "OPEN",
+    },
+    select: { id: true },
+  });
+  if (!openEvent) {
+    await prismaAny.aiEventSession.create({
+      data: {
+        tenantId: job.tenantId,
+        conversationId: conversation.id,
+        patientUserId: patient.id,
+        status: "OPEN",
+      },
+    });
   }
 
   if (conversation.aiEnabled) {
