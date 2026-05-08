@@ -2,6 +2,7 @@ FROM node:22-bookworm-slim AS base
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
+RUN corepack prepare pnpm@10.20.0 --activate
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
   && rm -rf /var/lib/apt/lists/*
@@ -12,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     g++ \
   && rm -rf /var/lib/apt/lists/*
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM base AS build
